@@ -1,0 +1,1612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>CineSwipe v3 — Live Movie Discovery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest" defer></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: { sans: ['Inter', 'sans-serif'] },
+      colors: {
+        cs: {
+          bg: '#0d1117',
+          surface: '#161b22',
+          surface2: '#21262d',
+          border: '#30363d',
+          accent: '#e50914',
+          gold: '#f0b429',
+          text: '#e6edf3',
+          dim: '#8b949e',
+        }
+      }
+    }
+  }
+};
+</script>
+<style>
+:root {
+  --bg: #0d1117; --surface: #161b22; --surface2: #21262d;
+  --border: #30363d; --accent: #e50914; --gold: #f0b429;
+  --text: #e6edf3; --dim: #8b949e;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); overflow: hidden; height: 100dvh; width: 100%; position: relative; user-select: none; -webkit-user-select: none; }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.app-shell { max-width: 430px; margin: 0 auto; height: 100dvh; display: flex; flex-direction: column; position: relative; background: var(--bg); box-shadow: 0 0 60px rgba(229,9,20,0.08); }
+
+/* Shimmer */
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.shimmer { background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+
+/* Card stack */
+.card-stack { position: relative; width: min(85vw, 380px); height: 65vh; max-height: 520px; margin: 0 auto; }
+.swipe-card { position: absolute; width: 100%; height: 100%; border-radius: 1rem; overflow: hidden; cursor: grab; touch-action: none; will-change: transform; transition: none; }
+.swipe-card.animating { transition: transform 0.4s ease, opacity 0.4s ease; pointer-events: none; }
+.swipe-card.entering { animation: cardEnter 0.3s ease forwards; }
+@keyframes cardEnter { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+.card-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 48px; font-weight: 800; opacity: 0; transition: opacity 0.15s; pointer-events: none; z-index: 5; border-radius: 1rem; }
+.card-overlay.like { background: rgba(34,197,94,0.2); border: 3px solid #22c55e; color: #22c55e; }
+.card-overlay.nope { background: rgba(239,68,68,0.2); border: 3px solid #ef4444; color: #ef4444; }
+.card-overlay.super { background: rgba(240,180,41,0.2); border: 3px solid var(--gold); color: var(--gold); }
+
+/* Tabs */
+.tab-bar { display: flex; align-items: center; justify-content: space-around; background: var(--surface); border-top: 1px solid var(--border); padding: 6px 0; padding-bottom: max(6px, env(safe-area-inset-bottom)); flex-shrink: 0; }
+.tab-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; font-weight: 500; color: var(--dim); background: none; border: none; cursor: pointer; padding: 4px 12px; min-height: 44px; min-width: 44px; }
+.tab-btn.active { color: var(--gold); }
+.tab-btn .tab-icon { font-size: 20px; line-height: 1; }
+
+/* Pill */
+.pill { display: inline-flex; align-items: center; gap: 4px; padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: var(--surface2); color: var(--dim); transition: all 0.15s; white-space: nowrap; min-height: 36px; }
+.pill.active, .pill:hover { border-color: var(--gold); color: var(--gold); background: rgba(240,180,41,0.1); }
+.pill.accent-active { border-color: var(--accent); color: #fff; background: var(--accent); }
+
+/* Toast */
+.toast-container { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; max-width: 430px; width: 100%; }
+.toast { padding: 10px 20px; border-radius: 12px; font-size: 13px; font-weight: 600; color: #fff; animation: toastIn 0.3s ease, toastOut 0.3s ease 2.2s forwards; pointer-events: auto; }
+@keyframes toastIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes toastOut { from { opacity: 1; } to { opacity: 0; transform: translateY(20px); } }
+
+/* Modal */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); z-index: 100; display: none; }
+.modal-overlay.open { display: flex; align-items: flex-end; justify-content: center; }
+.modal-content { background: var(--surface); border-radius: 1.25rem 1.25rem 0 0; max-width: 430px; width: 100%; max-height: 90vh; overflow-y: auto; animation: modalUp 0.3s ease; }
+.modal-content.center { border-radius: 1.25rem; margin: auto; max-height: 85vh; }
+@keyframes modalUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+/* Action buttons */
+.action-btn { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; border: 2px solid; transition: all 0.2s; background: transparent; }
+.action-btn:active { transform: scale(0.9); }
+.action-btn.skip { border-color: #ef4444; color: #ef4444; }
+.action-btn.skip:hover { background: rgba(239,68,68,0.15); }
+.action-btn.super-btn { border-color: var(--gold); color: var(--gold); width: 48px; height: 48px; font-size: 20px; }
+.action-btn.super-btn:hover { background: rgba(240,180,41,0.15); }
+.action-btn.like-btn { border-color: #22c55e; color: #22c55e; background: rgba(34,197,94,0.15); }
+.action-btn.like-btn:hover { background: rgba(34,197,94,0.3); }
+
+/* Page containers */
+.page { display: none; flex-direction: column; flex: 1; overflow-y: auto; overflow-x: hidden; }
+.page.active { display: flex; }
+
+/* Platform badge */
+.platform-badge { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 600; color: #fff; }
+
+/* Star rating */
+.star-rating { display: flex; gap: 4px; }
+.star-rating .star { font-size: 28px; cursor: pointer; color: var(--border); transition: color 0.1s; }
+.star-rating .star.filled { color: var(--gold); }
+
+/* Bar chart */
+.stat-bar { height: 24px; border-radius: 6px; background: var(--gold); transition: width 0.8s ease; }
+
+/* Onboarding */
+.onboard-screen { display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px 24px; flex: 1; }
+.onboard-screen.active { display: flex; }
+@keyframes cardWiggle { 0%,100% { transform: rotate(-8deg); } 50% { transform: rotate(8deg); } }
+.wiggle-card { animation: cardWiggle 2s ease-in-out infinite; }
+
+/* Mood scroll */
+.mood-scroll { display: flex; gap: 8px; overflow-x: auto; padding: 8px 16px; scrollbar-width: none; -ms-overflow-style: none; }
+.mood-scroll::-webkit-scrollbar { display: none; }
+
+/* Profile grid */
+.profile-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 20px; }
+.profile-card { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 20px 12px; border-radius: 16px; background: var(--surface2); cursor: pointer; border: 2px solid transparent; transition: all 0.2s; min-height: 44px; }
+.profile-card:hover { border-color: var(--gold); }
+.profile-card .avatar { font-size: 48px; }
+.profile-card .name { font-size: 13px; font-weight: 600; color: var(--text); }
+
+/* Watchlist grid */
+.wl-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; padding: 0 16px 16px; }
+.wl-card { background: var(--surface2); border-radius: 12px; overflow: hidden; cursor: pointer; transition: transform 0.15s; }
+.wl-card:active { transform: scale(0.97); }
+
+/* Filter section */
+.filter-section { margin-bottom: 20px; }
+.filter-section h3 { font-size: 13px; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; }
+.filter-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Search */
+.search-input { width: 100%; padding: 12px 16px 12px 44px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 15px; outline: none; }
+.search-input:focus { border-color: var(--gold); }
+.search-input::placeholder { color: var(--dim); }
+
+/* Confetti */
+@keyframes confettiFall { 0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
+.confetti-piece { position: fixed; width: 10px; height: 10px; z-index: 300; pointer-events: none; }
+</style>
+</head>
+<body data-id="0">
+<app-icon data-id="1" hidden data-icon="clapperboard" data-palette="Red"></app-icon>
+
+<div data-id="2" class="app-shell" id="appShell">
+
+<!-- ══════ ONBOARDING ══════ -->
+<div data-id="3" id="onboardingView" style="display:none;flex-direction:column;height:100%;">
+  <div data-id="4" style="display:flex;justify-content:flex-end;padding:16px;">
+    <button data-id="5" id="skipOnboard" style="background:none;border:none;color:var(--dim);font-size:13px;cursor:pointer;">Skip</button>
+  </div>
+  <div data-id="6" id="onboard1" class="onboard-screen active">
+    <div data-id="7" class="wiggle-card" style="width:180px;height:240px;border-radius:16px;background:linear-gradient(135deg,#1a1a2e,#e94560);display:flex;align-items:center;justify-content:center;font-size:64px;margin-bottom:32px;box-shadow:0 20px 40px rgba(0,0,0,0.4);">🎬</div>
+    <h1 data-id="8" style="font-size:32px;font-weight:800;color:var(--gold);margin-bottom:12px;">CineSwipe</h1>
+    <p data-id="9" style="color:var(--dim);font-size:15px;max-width:280px;">Discover movies you'll actually want to watch</p>
+  </div>
+  <div data-id="10" id="onboard2" class="onboard-screen">
+    <div data-id="11" style="font-size:64px;margin-bottom:24px;">❤️</div>
+    <h2 data-id="12" style="font-size:24px;font-weight:700;margin-bottom:24px;">How it works</h2>
+    <div data-id="13" style="display:flex;flex-direction:column;gap:16px;text-align:left;width:100%;max-width:280px;">
+      <div data-id="14" style="display:flex;align-items:center;gap:12px;"><span data-id="15" style="font-size:28px;">👉</span><span data-id="16" style="color:var(--dim);font-size:14px;">Swipe Right = Add to Watchlist ❤️</span></div>
+      <div data-id="17" style="display:flex;align-items:center;gap:12px;"><span data-id="18" style="font-size:28px;">👈</span><span data-id="19" style="color:var(--dim);font-size:14px;">Swipe Left = Not interested 👎</span></div>
+      <div data-id="20" style="display:flex;align-items:center;gap:12px;"><span data-id="21" style="font-size:28px;">👆</span><span data-id="22" style="color:var(--dim);font-size:14px;">Swipe Up = Super Like ⭐</span></div>
+    </div>
+  </div>
+  <div data-id="23" id="onboard3" class="onboard-screen">
+    <div data-id="24" style="font-size:64px;margin-bottom:24px;">🍿</div>
+    <h2 data-id="25" style="font-size:24px;font-weight:700;margin-bottom:8px;">Tell us what you love</h2>
+    <p data-id="26" style="color:var(--dim);font-size:13px;margin-bottom:20px;">Pick 3+ genres to get started</p>
+    <div data-id="27" id="onboardGenres" class="filter-pills" style="justify-content:center;max-width:340px;margin-bottom:24px;"></div>
+    <button data-id="28" id="onboardGo" style="background:var(--gold);color:#0d1117;border:none;padding:14px 48px;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;opacity:0.5;pointer-events:none;">Let's Go!</button>
+  </div>
+  <div data-id="29" style="display:flex;justify-content:center;gap:8px;padding:24px;">
+    <div data-id="30" class="onboard-dot" data-idx="0" style="width:8px;height:8px;border-radius:50%;background:var(--gold);cursor:pointer;"></div>
+    <div data-id="31" class="onboard-dot" data-idx="1" style="width:8px;height:8px;border-radius:50%;background:var(--border);cursor:pointer;"></div>
+    <div data-id="32" class="onboard-dot" data-idx="2" style="width:8px;height:8px;border-radius:50%;background:var(--border);cursor:pointer;"></div>
+  </div>
+</div>
+
+<!-- ══════ PROFILE SELECT ══════ -->
+<div data-id="33" id="profileView" style="display:none;flex-direction:column;height:100%;overflow-y:auto;">
+  <div data-id="34" style="text-align:center;padding:48px 20px 24px;">
+    <div data-id="35" style="font-size:48px;margin-bottom:12px;">🎬</div>
+    <h1 data-id="36" style="font-size:28px;font-weight:800;color:var(--gold);">CineSwipe</h1>
+    <p data-id="37" style="color:var(--dim);font-size:15px;margin-top:8px;">Who's watching?</p>
+  </div>
+  <div data-id="38" id="profileGrid" class="profile-grid"></div>
+</div>
+
+<!-- ══════ MAIN APP ══════ -->
+<div data-id="39" id="mainView" style="display:none;flex-direction:column;height:100%;">
+
+  <!-- Header -->
+  <header data-id="40" id="appHeader" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;flex-shrink:0;background:var(--surface);border-bottom:1px solid var(--border);">
+    <div data-id="41" style="font-size:18px;font-weight:800;color:var(--gold);">🎬 CineSwipe</div>
+    <div data-id="42" style="display:flex;gap:8px;">
+      <button data-id="43" id="shuffleBtn" class="pill" style="padding:6px 10px;" title="Shuffle">🔀</button>
+      <button data-id="44" id="filterBtn" class="pill" style="padding:6px 10px;position:relative;" title="Filters">🎛️ <span data-id="45" id="filterBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:var(--accent);color:#fff;font-size:9px;font-weight:700;border-radius:50%;width:18px;height:18px;display:none;align-items:center;justify-content:center;"></span></button>
+      <button data-id="46" id="groupBtn" class="pill" style="padding:6px 10px;" title="Group Mode">👥</button>
+    </div>
+  </header>
+
+  <!-- TAB PAGES -->
+  <!-- DISCOVER -->
+  <div data-id="47" id="discoverPage" class="page active">
+    <div data-id="48" class="mood-scroll" id="moodScroll"></div>
+    <div data-id="49" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:8px 0;">
+      <div data-id="50" class="card-stack" id="cardStack"></div>
+      <div data-id="51" id="actionButtons" style="display:flex;align-items:center;gap:20px;padding:4px 0;">
+        <button data-id="52" class="action-btn skip" id="btnSkip" title="Skip (←)">❌</button>
+        <button data-id="53" class="action-btn super-btn" id="btnSuper" title="Super Like (↑)">⭐</button>
+        <button data-id="54" class="action-btn like-btn" id="btnLike" title="Like (→)">❤️</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- WATCHLIST -->
+  <div data-id="55" id="watchlistPage" class="page">
+    <div data-id="56" style="padding:16px;display:flex;align-items:center;justify-content:space-between;">
+      <h2 data-id="57" style="font-size:20px;font-weight:700;">My Watchlist</h2>
+      <select data-id="58" id="wlSort" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">
+        <option data-id="59" value="date">Date Added</option>
+        <option data-id="60" value="rating">IMDb Rating</option>
+        <option data-id="61" value="title">Title A-Z</option>
+      </select>
+    </div>
+    <div data-id="62" class="mood-scroll" id="wlFilterScroll"></div>
+    <div data-id="63" id="watchlistGrid" class="wl-grid"></div>
+    <div data-id="64" id="wlEmpty" style="display:none;text-align:center;padding:60px 20px;">
+      <div data-id="65" style="font-size:64px;margin-bottom:16px;">🍿</div>
+      <p data-id="66" style="font-size:16px;font-weight:600;margin-bottom:8px;">Start swiping to build your watchlist</p>
+      <button data-id="67" id="wlGoDiscover" style="background:var(--gold);color:#0d1117;border:none;padding:10px 24px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;margin-top:12px;">Start Discovering</button>
+    </div>
+  </div>
+
+  <!-- SEARCH -->
+  <div data-id="68" id="searchPage" class="page">
+    <div data-id="69" style="padding:16px;">
+      <div data-id="70" style="position:relative;">
+        <i data-id="71" data-lucide="search" class="w-5 h-5" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--dim);"></i>
+        <input data-id="72" id="searchInput" class="search-input" type="text" placeholder="Search movies, actors, directors..." />
+      </div>
+    </div>
+    <div data-id="73" id="searchResults" style="padding:0 16px;"></div>
+    <div data-id="74" id="searchDefault" style="padding:0 16px;">
+      <h3 data-id="75" style="font-size:15px;font-weight:700;margin-bottom:12px;">🔥 Trending Now</h3>
+      <div data-id="76" id="trendingRow" style="display:flex;gap:12px;overflow-x:auto;padding-bottom:16px;scrollbar-width:none;"></div>
+      <h3 data-id="77" style="font-size:15px;font-weight:700;margin:8px 0 12px;">🆕 New Releases</h3>
+      <div data-id="78" id="newReleasesGrid" class="wl-grid" style="padding:0;"></div>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div data-id="79" id="statsPage" class="page">
+    <div data-id="80" style="padding:16px;">
+      <h2 data-id="81" style="font-size:20px;font-weight:700;margin-bottom:16px;">Your Movie Stats</h2>
+      <div data-id="82" id="statsOverview" style="display:flex;gap:10px;overflow-x:auto;padding-bottom:12px;scrollbar-width:none;"></div>
+      <div data-id="83" id="tasteTitleCard" style="text-align:center;padding:20px;background:var(--surface2);border-radius:16px;margin:16px 0;"></div>
+      <h3 data-id="84" style="font-size:14px;font-weight:600;color:var(--dim);margin:16px 0 10px;">YOUR TOP GENRES</h3>
+      <div data-id="85" id="genreBars"></div>
+      <h3 data-id="86" style="font-size:14px;font-weight:600;color:var(--dim);margin:16px 0 10px;">FAVORITE DECADES</h3>
+      <div data-id="87" id="decadeBars"></div>
+      <h3 data-id="88" style="font-size:14px;font-weight:600;color:var(--dim);margin:16px 0 10px;">RATINGS DISTRIBUTION</h3>
+      <div data-id="89" id="ratingDist"></div>
+    </div>
+  </div>
+
+  <!-- PROFILE -->
+  <div data-id="90" id="profilePage" class="page">
+    <div data-id="91" style="padding:24px 16px;text-align:center;">
+      <div data-id="92" id="profAvatar" style="font-size:72px;"></div>
+      <h2 data-id="93" id="profName" style="font-size:22px;font-weight:700;margin-top:8px;"></h2>
+      <button data-id="94" id="profEdit" style="background:none;border:none;color:var(--gold);font-size:13px;cursor:pointer;margin-top:4px;">Edit Profile</button>
+    </div>
+    <div data-id="95" style="padding:0 16px 16px;">
+      <div data-id="96" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;">
+        <div data-id="97" style="background:var(--surface2);border-radius:12px;padding:14px;text-align:center;">
+          <div data-id="98" id="profWlCount" style="font-size:24px;font-weight:800;color:var(--gold);">0</div>
+          <div data-id="99" style="font-size:11px;color:var(--dim);margin-top:2px;">Watchlist</div>
+        </div>
+        <div data-id="100" style="background:var(--surface2);border-radius:12px;padding:14px;text-align:center;">
+          <div data-id="101" id="profWatchedCount" style="font-size:24px;font-weight:800;color:var(--gold);">0</div>
+          <div data-id="102" style="font-size:11px;color:var(--dim);margin-top:2px;">Watched</div>
+        </div>
+        <div data-id="103" style="background:var(--surface2);border-radius:12px;padding:14px;text-align:center;">
+          <div data-id="104" id="profAvgRating" style="font-size:24px;font-weight:800;color:var(--gold);">—</div>
+          <div data-id="105" style="font-size:11px;color:var(--dim);margin-top:2px;">Avg Rating</div>
+        </div>
+      </div>
+      <h3 data-id="106" style="font-size:14px;font-weight:600;color:var(--dim);margin-bottom:12px;">SETTINGS</h3>
+      <div data-id="107" style="display:flex;flex-direction:column;gap:1px;background:var(--border);border-radius:12px;overflow:hidden;">
+        <div data-id="108" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--surface2);"><span data-id="109" style="font-size:14px;">Card Animation Speed</span>
+          <select data-id="110" id="animSpeed" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;"><option data-id="111" value="fast">Fast</option><option data-id="112" value="normal" selected>Normal</option><option data-id="113" value="slow">Slow</option></select>
+        </div>
+        <button data-id="114" id="clearHistory" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--surface2);border:none;color:var(--text);font-size:14px;cursor:pointer;width:100%;text-align:left;">Clear Swipe History<span data-id="115" style="color:var(--dim);">→</span></button>
+        <button data-id="116" id="exportWl" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--surface2);border:none;color:var(--text);font-size:14px;cursor:pointer;width:100;text-align:left;">Export Watchlist (JSON)<span data-id="117" style="color:var(--dim);">→</span></button>
+        <button data-id="118" id="switchProfile" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--surface2);border:none;color:var(--gold);font-size:14px;font-weight:600;cursor:pointer;width:100%;text-align:left;">Switch Profile<span data-id="119" style="color:var(--dim);">→</span></button>
+        <button data-id="120" id="deleteProfile" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--surface2);border:none;color:var(--accent);font-size:14px;font-weight:600;cursor:pointer;width:100%;text-align:left;">Delete Profile<span data-id="121" style="color:var(--dim);">→</span></button>
+      </div>
+      <div data-id="122" style="text-align:center;padding:32px 0 16px;">
+        <p data-id="123" style="font-size:14px;font-weight:700;color:var(--dim);">CineSwipe v3.0</p>
+        <p data-id="124" style="font-size:12px;color:var(--dim);margin-top:4px;">Built by Dancz Ministries</p>
+        <p data-id="125" style="font-size:12px;color:var(--gold);margin-top:2px;">danczministries.com</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab bar -->
+  <nav data-id="126" class="tab-bar">
+    <button data-id="127" class="tab-btn active" data-tab="discover"><span data-id="128" class="tab-icon">🎬</span>Discover</button>
+    <button data-id="129" class="tab-btn" data-tab="watchlist"><span data-id="130" class="tab-icon">❤️</span>Watchlist</button>
+    <button data-id="131" class="tab-btn" data-tab="search"><span data-id="132" class="tab-icon">🔍</span>Search</button>
+    <button data-id="133" class="tab-btn" data-tab="stats"><span data-id="134" class="tab-icon">📊</span>Stats</button>
+    <button data-id="135" class="tab-btn" data-tab="profile"><span data-id="136" class="tab-icon">👤</span>Profile</button>
+  </nav>
+</div>
+
+<!-- ══════ FILTER MODAL ══════ -->
+<div data-id="137" id="filterModal" class="modal-overlay">
+  <div data-id="138" class="modal-content" style="padding:20px;max-height:92vh;">
+    <div data-id="139" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h2 data-id="140" style="font-size:18px;font-weight:700;">Filters</h2>
+      <div data-id="141" style="display:flex;gap:12px;align-items:center;">
+        <button data-id="142" id="resetFilters" style="background:none;border:none;color:var(--accent);font-size:13px;cursor:pointer;">Reset All</button>
+        <button data-id="143" id="closeFilters" style="background:none;border:none;color:var(--text);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+    </div>
+    <div data-id="144" id="filterContent" style="overflow-y:auto;max-height:calc(92vh - 140px);"></div>
+    <button data-id="145" id="saveFilters" style="width:100%;padding:14px;background:var(--gold);color:#0d1117;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:16px;">SAVE FILTERS</button>
+  </div>
+</div>
+
+<!-- ══════ MOVIE DETAIL MODAL ══════ -->
+<div data-id="146" id="detailModal" class="modal-overlay">
+  <div data-id="147" class="modal-content" style="max-height:95vh;">
+    <div data-id="148" id="detailHeader" style="height:200px;position:relative;display:flex;align-items:center;justify-content:center;">
+      <button data-id="149" id="closeDetail" style="position:absolute;top:12px;right:12px;background:rgba(0,0,0,0.5);border:none;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:16px;z-index:5;">✕</button>
+      <span data-id="150" id="detailEmoji" style="font-size:72px;position:relative;z-index:2;"></span>
+    </div>
+    <div data-id="151" id="detailBody" style="padding:20px;"></div>
+    <div data-id="152" id="detailActions" style="padding:12px 20px 20px;display:flex;gap:10px;flex-wrap:wrap;"></div>
+  </div>
+</div>
+
+<!-- ══════ WATCHED/RATE MODAL ══════ -->
+<div data-id="153" id="rateModal" class="modal-overlay">
+  <div data-id="154" class="modal-content center" style="padding:24px;max-width:360px;">
+    <h3 data-id="155" id="rateTitle" style="font-size:18px;font-weight:700;text-align:center;margin-bottom:20px;"></h3>
+    <div data-id="156" id="rateStars" class="star-rating" style="justify-content:center;margin-bottom:16px;"></div>
+    <div data-id="157" id="rateReactions" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:16px;"></div>
+    <textarea data-id="158" id="rateReview" style="width:100%;height:70px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);padding:10px;font-size:13px;resize:none;" placeholder="Write a quick review..."></textarea>
+    <div data-id="159" style="display:flex;gap:10px;margin-top:16px;">
+      <button data-id="160" id="rateSkip" style="flex:1;padding:12px;background:var(--surface2);color:var(--dim);border:1px solid var(--border);border-radius:10px;font-size:14px;cursor:pointer;">Skip Rating</button>
+      <button data-id="161" id="rateSave" style="flex:1;padding:12px;background:var(--gold);color:#0d1117;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ CREATE PROFILE MODAL ══════ -->
+<div data-id="162" id="createProfileModal" class="modal-overlay">
+  <div data-id="163" class="modal-content center" style="padding:24px;max-width:360px;">
+    <h3 data-id="164" style="font-size:18px;font-weight:700;text-align:center;margin-bottom:16px;">Create Profile</h3>
+    <p data-id="165" style="font-size:13px;color:var(--dim);text-align:center;margin-bottom:12px;">Choose your avatar</p>
+    <div data-id="166" id="avatarPicker" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:16px;"></div>
+    <input data-id="167" id="profileNameInput" type="text" placeholder="Enter your name" style="width:100%;padding:12px 16px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:16px;outline:none;" />
+    <button data-id="168" id="createProfileBtn" style="width:100%;padding:14px;background:var(--gold);color:#0d1117;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;">Create Profile</button>
+  </div>
+</div>
+
+<!-- ══════ GROUP MODE MODAL ══════ -->
+<div data-id="169" id="groupModal" class="modal-overlay">
+  <div data-id="170" class="modal-content center" style="padding:24px;max-width:360px;">
+    <h3 data-id="171" style="font-size:18px;font-weight:700;text-align:center;margin-bottom:4px;">👥 Group Mode</h3>
+    <p data-id="172" style="font-size:13px;color:var(--dim);text-align:center;margin-bottom:16px;">Everyone swipes — see what you all agree on!</p>
+    <div data-id="173" id="groupPlayers" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
+    <button data-id="174" id="addPlayer" style="width:100%;padding:10px;background:var(--surface2);color:var(--dim);border:1px solid var(--border);border-radius:10px;font-size:14px;cursor:pointer;margin-bottom:16px;">+ Add Player</button>
+    <button data-id="175" id="startGroup" style="width:100%;padding:14px;background:var(--gold);color:#0d1117;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;">Start Group Session</button>
+    <button data-id="176" id="closeGroup" style="width:100%;padding:10px;background:none;border:none;color:var(--dim);font-size:13px;cursor:pointer;margin-top:8px;">Cancel</button>
+  </div>
+</div>
+
+<!-- CONFIRM MODAL -->
+<div data-id="177" id="confirmModal" class="modal-overlay">
+  <div data-id="178" class="modal-content center" style="padding:24px;max-width:320px;text-align:center;">
+    <p data-id="179" id="confirmText" style="font-size:15px;margin-bottom:20px;"></p>
+    <div data-id="180" style="display:flex;gap:10px;">
+      <button data-id="181" id="confirmNo" style="flex:1;padding:12px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:10px;cursor:pointer;">Cancel</button>
+      <button data-id="182" id="confirmYes" style="flex:1;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div data-id="183" class="toast-container" id="toastContainer"></div>
+</div>
+
+<footer data-id="184" style="text-align:center;padding:4px 0 2px;position:fixed;bottom:0;left:0;right:0;pointer-events:none;">
+  <p data-id="185" style="font-size:9px;color:#30363d;">Made by Copilot</p>
+</footer>
+
+<script>
+if (typeof lucide !== "undefined" && typeof lucide.createIcons === "function") { lucide.createIcons(); }
+
+/* ═══════════════════════════════════════ */
+/* STATE & PERSISTENCE                    */
+/* ═══════════════════════════════════════ */
+const STORAGE_KEY = 'cineswipe_v3';
+const AVATARS = ['🎬','🍿','👻','🚀','🎭','🦸','🔪','😱','🤠','💀','🧙','🐉','🌙','❤️','🎵','🤖'];
+const GENRES = ['Action','Adventure','Animation','Biography','Comedy','Crime','Documentary','Drama','Fantasy','History','Horror','Musical','Mystery','Romance','Sci-Fi','Sport','Superhero','Thriller','War','Western'];
+const MOODS = [{e:'😂',l:'Funny'},{e:'😱',l:'Scary'},{e:'😭',l:'Feel-Good'},{e:'🔥',l:'Epic'},{e:'🤔',l:'Deep'},{e:'💕',l:'Romantic'},{e:'😬',l:'Tense'},{e:'🥺',l:'Heartwarming'},{e:'🤯',l:'Mind-Bending'},{e:'💀',l:'Dark'},{e:'🎉',l:'Light-Hearted'},{e:'😤',l:'Action-Packed'}];
+const DECADES = ['Pre-1970s','1970s','1980s','1990s','2000s','2010s','2020s'];
+const PLATFORMS = [{n:'Netflix',c:'#e50914'},{n:'HBO Max',c:'#6441a5'},{n:'Disney+',c:'#113ccf'},{n:'Prime',c:'#00a8e0'},{n:'Hulu',c:'#1ce783',tc:'#000'},{n:'Peacock',c:'#0067b9'},{n:'Paramount+',c:'#0064ff'},{n:'Apple TV+',c:'#555'},{n:'Showtime',c:'#c8102e'},{n:'AMC+',c:'#d4202a'},{n:'Crunchyroll',c:'#ff6400'},{n:'Tubi',c:'#fa4b05'},{n:'ESPN+',c:'#cc0000'},{n:'Kanopy',c:'#2e7d32'}];
+const MPAA = ['G','PG','PG-13','R','NC-17','Not Rated'];
+const RUNTIMES = ['Any','Under 90min','90-120min','2-3 hours','Over 3 hours'];
+const LANGUAGES = ['Any','English','Spanish','French','Korean','Japanese','Italian','German','Hindi','Portuguese','Mandarin','Arabic'];
+const COUNTRIES = ['Any','USA','UK','South Korea','France','Japan','Italy','Spain','India','Germany','Mexico','Australia'];
+const SORT_OPTIONS = ['Relevance','IMDb Rating ↓','Release Year ↓','Release Year ↑','Alphabetical'];
+const REACTIONS = ['😍 Loved it','👍 Liked it','😐 It was okay','👎 Didn\'t like it','🔄 Would rewatch'];
+
+const GENRE_GRADIENTS = {
+  'Action':'linear-gradient(135deg,#1a1a2e,#e94560)','Drama':'linear-gradient(135deg,#0f3460,#533483)',
+  'Comedy':'linear-gradient(135deg,#f7971e,#ffd200)','Horror':'linear-gradient(135deg,#0d0d0d,#3d0000)',
+  'Sci-Fi':'linear-gradient(135deg,#000428,#004e92)','Romance':'linear-gradient(135deg,#f953c6,#b91d73)',
+  'Thriller':'linear-gradient(135deg,#1f1c18,#635347)','Animation':'linear-gradient(135deg,#11998e,#38ef7d)',
+  'Crime':'linear-gradient(135deg,#373b44,#4286f4)','Mystery':'linear-gradient(135deg,#1a1a2e,#9b59b6)',
+  'Documentary':'linear-gradient(135deg,#134e5e,#71b280)','Adventure':'linear-gradient(135deg,#16213e,#e94560)',
+  'Fantasy':'linear-gradient(135deg,#200122,#6f0000)','Superhero':'linear-gradient(135deg,#1a1a2e,#c0392b)',
+  'Musical':'linear-gradient(135deg,#4776e6,#8e54e9)','War':'linear-gradient(135deg,#373b44,#485563)',
+  'Western':'linear-gradient(135deg,#b79891,#94716b)','Biography':'linear-gradient(135deg,#0f2027,#2c5364)',
+  'History':'linear-gradient(135deg,#2c3e50,#4ca1af)','Sport':'linear-gradient(135deg,#134e5e,#71b280)'
+};
+const PLAT_COLORS = {'Netflix':'#e50914','HBO Max':'#6441a5','Max':'#6441a5','Disney+':'#113ccf','Prime':'#00a8e0','Hulu':'#1ce783','Peacock':'#0067b9','Paramount+':'#0064ff','Apple TV+':'#555','Showtime':'#c8102e','AMC+':'#d4202a','Crunchyroll':'#ff6400','Tubi':'#fa4b05','ESPN+':'#cc0000','Kanopy':'#2e7d32'};
+
+let STATE = { profiles: {}, currentProfile: null };
+let deck = [], deckLoading = false, seenIds = [], currentSwipeCard = null;
+let groupMode = { active: false, players: [], currentPlayer: 0, votes: {}, deckSnapshot: [] };
+let activeFilters = {};
+let activeMoodFilter = null;
+let currentRateMovie = null;
+let confirmCallback = null;
+let searchDebounce = null;
+let animDuration = 400;
+
+function loadState() {
+  try { const s = localStorage.getItem(STORAGE_KEY); if (s) STATE = JSON.parse(s); } catch(e) {}
+}
+function saveState() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE)); } catch(e) {}
+}
+function getProfile() { return STATE.profiles[STATE.currentProfile] || null; }
+function uid() { return Math.random().toString(36).substr(2,9); }
+
+loadState();
+
+/* ═══════════════════════════════════════ */
+/* TOAST                                  */
+/* ═══════════════════════════════════════ */
+function showToast(msg, color = '#22c55e') {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.style.background = color;
+  t.textContent = msg;
+  document.getElementById('toastContainer').appendChild(t);
+  setTimeout(() => t.remove(), 2600);
+}
+
+/* ═══════════════════════════════════════ */
+/* CONFIRM DIALOG                         */
+/* ═══════════════════════════════════════ */
+function showConfirm(text, cb) {
+  document.getElementById('confirmText').textContent = text;
+  document.getElementById('confirmModal').classList.add('open');
+  confirmCallback = cb;
+}
+document.getElementById('confirmYes').addEventListener('click', () => {
+  document.getElementById('confirmModal').classList.remove('open');
+  if (confirmCallback) confirmCallback();
+  confirmCallback = null;
+});
+document.getElementById('confirmNo').addEventListener('click', () => {
+  document.getElementById('confirmModal').classList.remove('open');
+  confirmCallback = null;
+});
+
+/* ═══════════════════════════════════════ */
+/* NAVIGATION                             */
+/* ═══════════════════════════════════════ */
+function showView(v) {
+  ['onboardingView','profileView','mainView'].forEach(id => {
+    document.getElementById(id).style.display = 'none';
+  });
+  document.getElementById(v).style.display = 'flex';
+}
+
+const tabs = document.querySelectorAll('.tab-btn[data-tab]');
+const pages = { discover:'discoverPage', watchlist:'watchlistPage', search:'searchPage', stats:'statsPage', profile:'profilePage' };
+function switchTab(tab) {
+  tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  Object.entries(pages).forEach(([k,v]) => {
+    document.getElementById(v).classList.toggle('active', k === tab);
+  });
+  if (tab === 'watchlist') renderWatchlist();
+  if (tab === 'stats') renderStats();
+  if (tab === 'profile') renderProfileTab();
+  if (tab === 'search') loadSearchDefaults();
+  const hdr = document.getElementById('appHeader');
+  hdr.style.display = tab === 'discover' ? 'flex' : 'none';
+}
+tabs.forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+
+/* ═══════════════════════════════════════ */
+/* ONBOARDING                             */
+/* ═══════════════════════════════════════ */
+let onboardStep = 0;
+const onboardScreens = ['onboard1','onboard2','onboard3'];
+const onboardDots = document.querySelectorAll('.onboard-dot');
+let selectedOnboardGenres = new Set();
+
+function renderOnboardGenres() {
+  const c = document.getElementById('onboardGenres');
+  c.innerHTML = '';
+  GENRES.forEach(g => {
+    const p = document.createElement('div');
+    p.className = 'pill' + (selectedOnboardGenres.has(g) ? ' active' : '');
+    p.textContent = g;
+    p.addEventListener('click', () => {
+      if (selectedOnboardGenres.has(g)) selectedOnboardGenres.delete(g); else selectedOnboardGenres.add(g);
+      renderOnboardGenres();
+    });
+    c.appendChild(p);
+  });
+  const btn = document.getElementById('onboardGo');
+  const ok = selectedOnboardGenres.size >= 3;
+  btn.style.opacity = ok ? '1' : '0.5';
+  btn.style.pointerEvents = ok ? 'auto' : 'none';
+}
+
+function setOnboard(step) {
+  onboardStep = step;
+  onboardScreens.forEach((s,i) => document.getElementById(s).classList.toggle('active', i === step));
+  onboardDots.forEach((d,i) => d.style.background = i === step ? 'var(--gold)' : 'var(--border)');
+}
+onboardDots.forEach(d => d.addEventListener('click', () => setOnboard(parseInt(d.dataset.idx))));
+
+document.getElementById('onboard1').addEventListener('click', () => setOnboard(1));
+document.getElementById('onboard2').addEventListener('click', () => setOnboard(2));
+document.getElementById('skipOnboard').addEventListener('click', finishOnboarding);
+document.getElementById('onboardGo').addEventListener('click', finishOnboarding);
+
+function finishOnboarding() {
+  STATE._onboarded = true;
+  saveState();
+  showView('profileView');
+  renderProfiles();
+}
+
+/* ═══════════════════════════════════════ */
+/* PROFILE MANAGEMENT                     */
+/* ═══════════════════════════════════════ */
+function renderProfiles() {
+  const grid = document.getElementById('profileGrid');
+  grid.innerHTML = '';
+  Object.entries(STATE.profiles).forEach(([id, p]) => {
+    const card = document.createElement('div');
+    card.className = 'profile-card';
+    card.innerHTML = `<span class="avatar">${p.avatar}</span><span class="name">${p.name}</span>`;
+    card.addEventListener('click', () => selectProfile(id));
+    grid.appendChild(card);
+  });
+  if (Object.keys(STATE.profiles).length < 6) {
+    const add = document.createElement('div');
+    add.className = 'profile-card';
+    add.innerHTML = `<span class="avatar" style="color:var(--dim);">+</span><span class="name" style="color:var(--dim);">Add Profile</span>`;
+    add.addEventListener('click', openCreateProfile);
+    grid.appendChild(add);
+  }
+}
+
+function openCreateProfile() {
+  document.getElementById('createProfileModal').classList.add('open');
+  const picker = document.getElementById('avatarPicker');
+  picker.innerHTML = '';
+  let selAvatar = AVATARS[0];
+  AVATARS.forEach(a => {
+    const btn = document.createElement('div');
+    btn.style.cssText = `font-size:32px;width:48px;height:48px;display:flex;align-items:center;justify-content:center;border-radius:12px;cursor:pointer;border:2px solid ${a === selAvatar ? 'var(--gold)' : 'transparent'};background:var(--surface2);`;
+    btn.textContent = a;
+    btn.addEventListener('click', () => {
+      selAvatar = a;
+      picker.querySelectorAll('div').forEach(d => d.style.borderColor = 'transparent');
+      btn.style.borderColor = 'var(--gold)';
+    });
+    picker.appendChild(btn);
+  });
+  document.getElementById('profileNameInput').value = '';
+  document.getElementById('createProfileBtn').addEventListener('click', function handler() {
+    const name = document.getElementById('profileNameInput').value.trim() || 'Player';
+    const id = uid();
+    STATE.profiles[id] = {
+      name, avatar: selAvatar, watchlist: [], superlikes: [], watched: {},
+      swipeHistory: [], tasteProfile: { genres: {}, moods: {}, decades: {}, platforms: {}, directors: {}, actors: {} },
+      filters: {}, seenIds: [],
+      initialGenres: [...selectedOnboardGenres]
+    };
+    saveState();
+    document.getElementById('createProfileModal').classList.remove('open');
+    document.getElementById('createProfileBtn').removeEventListener('click', handler);
+    selectProfile(id);
+  }, { once: true });
+}
+
+function selectProfile(id) {
+  STATE.currentProfile = id;
+  saveState();
+  const p = getProfile();
+  activeFilters = { ...p.filters };
+  seenIds = [...(p.seenIds || [])];
+  deck = [];
+  showView('mainView');
+  switchTab('discover');
+  renderMoodScroll();
+  fetchMovies();
+}
+
+/* ═══════════════════════════════════════ */
+/* MOOD QUICK FILTER                      */
+/* ═══════════════════════════════════════ */
+function renderMoodScroll() {
+  const c = document.getElementById('moodScroll');
+  c.innerHTML = '';
+  const allPill = document.createElement('div');
+  allPill.className = 'pill' + (!activeMoodFilter ? ' active' : '');
+  allPill.textContent = 'All';
+  allPill.addEventListener('click', () => { activeMoodFilter = null; renderMoodScroll(); deck = []; seenIds = getProfile().seenIds || []; fetchMovies(); });
+  c.appendChild(allPill);
+  MOODS.forEach(m => {
+    const p = document.createElement('div');
+    p.className = 'pill' + (activeMoodFilter === m.l ? ' active' : '');
+    p.textContent = `${m.e} ${m.l}`;
+    p.addEventListener('click', () => { activeMoodFilter = m.l; renderMoodScroll(); deck = []; fetchMovies(); });
+    c.appendChild(p);
+  });
+}
+
+/* ═══════════════════════════════════════ */
+/* AI MOVIE FETCHING                      */
+/* ═══════════════════════════════════════ */
+async function fetchMovies(retries = 1) {
+  if (deckLoading) return;
+  deckLoading = true;
+  showSkeleton();
+  const profile = getProfile();
+  const filters = { ...activeFilters };
+  if (activeMoodFilter) filters.mood = activeMoodFilter;
+  if (profile && profile.initialGenres && profile.initialGenres.length && !filters.genres) {
+    filters.preferredGenres = profile.initialGenres;
+  }
+  const taste = profile ? profile.tasteProfile : {};
+  const seen = [...seenIds];
+  try {
+    const result = await AppSDK.ai.chat({
+      messages: [{
+        role: 'user',
+        content: `Return exactly 10 movie recommendations as a JSON array. Each movie object must have these exact fields:
+{
+  "id": "unique_string_id",
+  "title": "Movie Title",
+  "year": 2023,
+  "rating": 8.5,
+  "imdb_rating": 8.5,
+  "runtime": 120,
+  "genres": ["Action","Drama"],
+  "director": "Director Name",
+  "cast": ["Actor 1", "Actor 2", "Actor 3"],
+  "description": "2-3 sentence plot description",
+  "tagline": "Movie tagline",
+  "platforms": ["Netflix","HBO Max"],
+  "mood": ["epic","tense"],
+  "decade": "2020s",
+  "mpaa": "PG-13",
+  "language": "English",
+  "country": "USA",
+  "awards": "Academy Award Winner",
+  "budget": "$200M",
+  "boxOffice": "$1.5B",
+  "emoji": "🎬",
+  "posterGradient": "linear-gradient(135deg,#1a1a2e,#e94560)"
+}
+Active filters: ${JSON.stringify(filters)}
+User taste profile (genres they like): ${JSON.stringify(taste)}
+Already seen titles/IDs (EXCLUDE these, give completely different movies): ${JSON.stringify(seen.slice(-50))}
+Important: Return diverse, real, well-known movies. Vary genres and decades. Return ONLY valid JSON array, no markdown, no explanation, no code fences.`
+      }]
+    });
+    let content = result.content.trim();
+    if (content.startsWith('```')) {
+      content = content.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+    }
+    const movies = JSON.parse(content);
+    const valid = movies.filter(m => m && m.title && m.year && m.genres);
+    const deduped = valid.filter(m => !seenIds.includes(m.title));
+    deduped.forEach(m => {
+      if (!m.posterGradient || !m.posterGradient.startsWith('linear')) {
+        const g = m.genres && m.genres[0] ? GENRE_GRADIENTS[m.genres[0]] : null;
+        m.posterGradient = g || 'linear-gradient(135deg,#1a1a2e,#e94560)';
+      }
+      if (!m.emoji) m.emoji = '🎬';
+      if (!m.id) m.id = m.title;
+      seenIds.push(m.title);
+    });
+    deck.push(...deduped);
+    if (profile) { profile.seenIds = seenIds; saveState(); }
+    deckLoading = false;
+    renderDeck();
+  } catch(e) {
+    console.error('Fetch movies error:', e);
+    if (retries > 0) {
+      deckLoading = false;
+      setTimeout(() => fetchMovies(retries - 1), 2000);
+    } else {
+      deckLoading = false;
+      showEmptyDeck();
+    }
+  }
+}
+
+function showSkeleton() {
+  const stack = document.getElementById('cardStack');
+  stack.innerHTML = `<div style="width:100%;height:100%;border-radius:16px;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
+    <div class="shimmer" style="width:100%;height:100%;border-radius:16px;position:absolute;inset:0;"></div>
+    <div style="position:relative;z-index:2;text-align:center;">
+      <div style="font-size:32px;margin-bottom:12px;animation:cardWiggle 1.5s infinite;">🎬</div>
+      <p style="color:var(--dim);font-size:14px;">Finding movies for you...</p>
+    </div>
+  </div>`;
+}
+
+function showEmptyDeck() {
+  const stack = document.getElementById('cardStack');
+  const prof = getProfile();
+  const liked = prof ? prof.watchlist.length : 0;
+  const skipped = prof ? prof.swipeHistory.filter(s => s.action === 'skip').length : 0;
+  stack.innerHTML = `<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;">
+    <div style="font-size:64px;margin-bottom:16px;">🎬</div>
+    <p style="font-size:16px;font-weight:600;margin-bottom:6px;">You've seen everything!</p>
+    <p style="font-size:13px;color:var(--dim);margin-bottom:20px;">❤️ ${liked} liked · 👎 ${skipped} skipped this session</p>
+    <button id="loadMoreBtn" style="background:var(--gold);color:#0d1117;border:none;padding:12px 28px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;">🔀 Load More</button>
+    <button id="changeFiltersBtn" style="background:none;border:none;color:var(--dim);font-size:13px;cursor:pointer;">Change Filters</button>
+  </div>`;
+  document.getElementById('loadMoreBtn').addEventListener('click', () => fetchMovies());
+  document.getElementById('changeFiltersBtn').addEventListener('click', openFilters);
+}
+
+/* ═══════════════════════════════════════ */
+/* RENDER DECK & SWIPE                    */
+/* ═══════════════════════════════════════ */
+function renderDeck() {
+  const stack = document.getElementById('cardStack');
+  stack.innerHTML = '';
+  if (deck.length === 0) { showEmptyDeck(); return; }
+  const show = deck.slice(0, 3);
+  show.reverse().forEach((movie, ri) => {
+    const idx = show.length - 1 - ri;
+    const card = createCard(movie, idx);
+    stack.appendChild(card);
+  });
+  if (deck.length > 0) setupSwipe(stack.lastElementChild, deck[0]);
+  if (deck.length < 3 && !deckLoading) fetchMovies();
+}
+
+function createCard(movie, stackIdx) {
+  const prof = getProfile();
+  const isWatched = prof && prof.watched && prof.watched[movie.title];
+  const likeCount = prof ? prof.watchlist.length + prof.superlikes.length : 0;
+  const matchPct = likeCount >= 5 ? calcMatch(movie) : null;
+
+  const card = document.createElement('div');
+  card.className = 'swipe-card' + (stackIdx === 0 ? ' entering' : '');
+  const scale = 1 - stackIdx * 0.05;
+  const ty = stackIdx * 10;
+  card.style.cssText = `transform:scale(${scale}) translateY(${ty}px);z-index:${10 - stackIdx};background:${movie.posterGradient};`;
+
+  const platBadges = (movie.platforms || []).slice(0, 3).map(p => {
+    const col = PLAT_COLORS[p] || '#555';
+    const tc = p === 'Hulu' ? '#000' : '#fff';
+    return `<span class="platform-badge" style="background:${col};color:${tc};">${p}</span>`;
+  }).join('');
+  const genrePills = (movie.genres || []).slice(0, 3).map(g => `<span style="display:inline-block;padding:3px 10px;border-radius:999px;border:1px solid var(--gold);color:var(--gold);font-size:10px;font-weight:600;">${g}</span>`).join(' ');
+
+  card.innerHTML = `
+    <div class="card-overlay like" id="overlay-like">LIKE ❤️</div>
+    <div class="card-overlay nope" id="overlay-nope">NOPE 👎</div>
+    <div class="card-overlay super" id="overlay-super">SUPER ⭐</div>
+    <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,0.85) 55%,transparent 100%);z-index:1;"></div>
+    <div style="position:absolute;top:12px;left:12px;z-index:3;background:rgba(0,0,0,0.6);padding:4px 10px;border-radius:8px;font-size:13px;font-weight:700;color:var(--gold);">⭐ ${(movie.imdb_rating||movie.rating||0).toFixed(1)}</div>
+    ${matchPct ? `<div style="position:absolute;top:12px;right:12px;z-index:3;background:rgba(240,180,41,0.2);border:1px solid var(--gold);padding:4px 10px;border-radius:8px;font-size:12px;font-weight:700;color:var(--gold);">🎯 ${matchPct}%</div>` : ''}
+    ${isWatched ? `<div style="position:absolute;top:${matchPct?'44':'12'}px;right:12px;z-index:3;background:rgba(34,197,94,0.2);border:1px solid #22c55e;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;color:#22c55e;">✓ Watched</div>` : ''}
+    <div style="position:absolute;top:30%;left:50%;transform:translate(-50%,-50%);font-size:64px;z-index:2;">${movie.emoji || '🎬'}</div>
+    <div style="position:absolute;bottom:0;left:0;right:0;z-index:2;padding:16px;">
+      <h3 style="font-size:20px;font-weight:800;margin-bottom:4px;line-height:1.2;">${movie.title}</h3>
+      <p style="font-size:12px;color:var(--dim);margin-bottom:8px;">${movie.year} · ${movie.runtime || '—'}min · ${movie.mpaa || 'NR'}</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${genrePills}</div>
+      ${movie.tagline ? `<p style="font-size:12px;color:var(--dim);font-style:italic;margin-bottom:8px;">"${movie.tagline}"</p>` : ''}
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px;">${platBadges}</div>
+      <p style="font-size:11px;color:var(--dim);">${(movie.cast || []).slice(0, 3).join(' · ')}</p>
+    </div>`;
+
+  card.addEventListener('dblclick', (e) => { e.preventDefault(); openDetail(movie); });
+  return card;
+}
+
+function calcMatch(movie) {
+  const prof = getProfile(); if (!prof) return null;
+  const taste = prof.tasteProfile;
+  let score = 50;
+  (movie.genres || []).forEach(g => { if (taste.genres[g]) score += taste.genres[g] * 5; });
+  return Math.min(99, Math.max(40, Math.round(score)));
+}
+
+/* SWIPE PHYSICS */
+function setupSwipe(card, movie) {
+  if (!card) return;
+  let startX = 0, startY = 0, currentX = 0, currentY = 0, isDragging = false;
+  let positions = [];
+  currentSwipeCard = { card, movie };
+
+  function onStart(e) {
+    isDragging = true;
+    const pt = e.touches ? e.touches[0] : e;
+    startX = pt.clientX; startY = pt.clientY;
+    currentX = 0; currentY = 0;
+    positions = [{ x: pt.clientX, y: pt.clientY, t: Date.now() }];
+    card.style.transition = 'none';
+    card.style.cursor = 'grabbing';
+  }
+  function onMove(e) {
+    if (!isDragging) return;
+    e.preventDefault();
+    const pt = e.touches ? e.touches[0] : e;
+    currentX = pt.clientX - startX;
+    currentY = pt.clientY - startY;
+    positions.push({ x: pt.clientX, y: pt.clientY, t: Date.now() });
+    if (positions.length > 5) positions.shift();
+    const rot = (currentX / 15);
+    card.style.transform = `translateX(${currentX}px) translateY(${currentY}px) rotate(${rot}deg)`;
+    const likeO = card.querySelector('.card-overlay.like');
+    const nopeO = card.querySelector('.card-overlay.nope');
+    const superO = card.querySelector('.card-overlay.super');
+    likeO.style.opacity = Math.max(0, currentX / 150);
+    nopeO.style.opacity = Math.max(0, -currentX / 150);
+    superO.style.opacity = Math.max(0, -currentY / 120);
+  }
+  function onEnd() {
+    if (!isDragging) return;
+    isDragging = false;
+    card.style.cursor = 'grab';
+    let vx = 0, vy = 0;
+    if (positions.length >= 2) {
+      const last = positions[positions.length-1], prev = positions[positions.length-2];
+      const dt = (last.t - prev.t) / 1000 || 0.016;
+      vx = (last.x - prev.x) / dt; vy = (last.y - prev.y) / dt;
+    }
+    const fastFlick = Math.abs(vx) > 800 || Math.abs(vy) > 800;
+    if (currentX > 100 || (vx > 800 && currentX > 30)) { doSwipe('like', movie); }
+    else if (currentX < -100 || (vx < -800 && currentX < -30)) { doSwipe('skip', movie); }
+    else if (currentY < -80 || (vy < -800 && currentY < -30)) { doSwipe('super', movie); }
+    else { card.style.transition = 'transform 0.3s ease'; card.style.transform = 'scale(1) translateY(0)';
+      card.querySelector('.card-overlay.like').style.opacity = 0;
+      card.querySelector('.card-overlay.nope').style.opacity = 0;
+      card.querySelector('.card-overlay.super').style.opacity = 0;
+    }
+  }
+  card.addEventListener('pointerdown', onStart);
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onEnd);
+  card._cleanup = () => { document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onEnd); };
+}
+
+function doSwipe(action, movie) {
+  const card = currentSwipeCard ? currentSwipeCard.card : null;
+  if (card && card._cleanup) card._cleanup();
+
+  if (card) {
+    card.classList.add('animating');
+    if (action === 'like') card.style.transform = `translateX(150vw) rotate(30deg)`;
+    else if (action === 'skip') card.style.transform = `translateX(-150vw) rotate(-30deg)`;
+    else card.style.transform = `translateY(-150vh) scale(0.5)`;
+    card.style.opacity = '0';
+  }
+
+  const prof = getProfile();
+  if (!prof) return;
+
+  if (groupMode.active) {
+    if (!groupMode.votes[movie.title]) groupMode.votes[movie.title] = {};
+    groupMode.votes[movie.title][groupMode.players[groupMode.currentPlayer]] = action;
+    groupMode.currentPlayer++;
+    if (groupMode.currentPlayer >= groupMode.players.length) {
+      groupMode.currentPlayer = 0;
+      deck.shift();
+      if (deck.length === 0) showGroupResults();
+      else setTimeout(renderDeck, animDuration);
+    } else {
+      showToast(`${groupMode.players[groupMode.currentPlayer]}'s turn!`, '#3b82f6');
+      setTimeout(renderDeck, animDuration);
+    }
+    return;
+  }
+
+  prof.swipeHistory.push({ title: movie.title, action, date: new Date().toISOString() });
+
+  if (action === 'like') {
+    if (!prof.watchlist.find(m => m.title === movie.title)) prof.watchlist.push(movie);
+    updateTaste(prof, movie, 1);
+    showToast('❤️ Added to Watchlist', '#22c55e');
+  } else if (action === 'super') {
+    if (!prof.watchlist.find(m => m.title === movie.title)) prof.watchlist.push(movie);
+    if (!prof.superlikes.find(m => m.title === movie.title)) prof.superlikes.push(movie);
+    updateTaste(prof, movie, 2);
+    showToast('⭐ Super Liked!', 'var(--gold)');
+  } else {
+    updateTaste(prof, movie, -0.5);
+    showToast('👎 Skipped', '#ef4444');
+  }
+
+  deck.shift();
+  saveState();
+  setTimeout(renderDeck, animDuration);
+}
+
+function updateTaste(prof, movie, weight) {
+  const t = prof.tasteProfile;
+  (movie.genres || []).forEach(g => { t.genres[g] = (t.genres[g] || 0) + weight; });
+  (movie.mood || []).forEach(m => { t.moods[m] = (t.moods[m] || 0) + weight; });
+  if (movie.decade) t.decades[movie.decade] = (t.decades[movie.decade] || 0) + weight;
+  (movie.platforms || []).forEach(p => { t.platforms[p] = (t.platforms[p] || 0) + weight; });
+  if (movie.director) t.directors[movie.director] = (t.directors[movie.director] || 0) + weight;
+  (movie.cast || []).forEach(a => { t.actors[a] = (t.actors[a] || 0) + weight; });
+}
+
+/* Button swipes */
+document.getElementById('btnSkip').addEventListener('click', () => { if (deck.length) doSwipe('skip', deck[0]); });
+document.getElementById('btnLike').addEventListener('click', () => { if (deck.length) doSwipe('like', deck[0]); });
+document.getElementById('btnSuper').addEventListener('click', () => { if (deck.length) doSwipe('super', deck[0]); });
+
+/* Keyboard */
+document.addEventListener('keydown', (e) => {
+  const tab = document.querySelector('.tab-btn.active');
+  if (!tab || tab.dataset.tab !== 'discover') return;
+  if (deck.length === 0) return;
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); doSwipe('like', deck[0]); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); doSwipe('skip', deck[0]); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); doSwipe('super', deck[0]); }
+});
+
+/* Shuffle */
+document.getElementById('shuffleBtn').addEventListener('click', () => {
+  deck = [];
+  seenIds = [];
+  if (getProfile()) { getProfile().seenIds = []; saveState(); }
+  fetchMovies();
+});
+
+/* ═══════════════════════════════════════ */
+/* FILTERS                                */
+/* ═══════════════════════════════════════ */
+function openFilters() {
+  const modal = document.getElementById('filterModal');
+  modal.classList.add('open');
+  renderFilterContent();
+}
+document.getElementById('filterBtn').addEventListener('click', openFilters);
+document.getElementById('closeFilters').addEventListener('click', () => document.getElementById('filterModal').classList.remove('open'));
+document.getElementById('resetFilters').addEventListener('click', () => {
+  activeFilters = {};
+  renderFilterContent();
+});
+document.getElementById('saveFilters').addEventListener('click', () => {
+  const prof = getProfile();
+  if (prof) { prof.filters = { ...activeFilters }; saveState(); }
+  document.getElementById('filterModal').classList.remove('open');
+  deck = []; seenIds = [];
+  if (prof) { prof.seenIds = []; saveState(); }
+  updateFilterBadge();
+  fetchMovies();
+});
+
+function updateFilterBadge() {
+  const count = Object.keys(activeFilters).filter(k => {
+    const v = activeFilters[k];
+    if (Array.isArray(v)) return v.length > 0;
+    if (typeof v === 'string') return v && v !== 'Any';
+    if (typeof v === 'boolean') return v;
+    return v != null;
+  }).length;
+  const badge = document.getElementById('filterBadge');
+  if (count > 0) { badge.style.display = 'flex'; badge.textContent = count; }
+  else badge.style.display = 'none';
+}
+
+function renderFilterContent() {
+  const c = document.getElementById('filterContent');
+  if (!activeFilters.genres) activeFilters.genres = [];
+  if (!activeFilters.platforms) activeFilters.platforms = [];
+  if (!activeFilters.moods) activeFilters.moods = [];
+  if (!activeFilters.decades) activeFilters.decades = [];
+  if (!activeFilters.mpaa) activeFilters.mpaa = [];
+  if (!activeFilters.ratingMin) activeFilters.ratingMin = 6.0;
+  if (!activeFilters.ratingMax) activeFilters.ratingMax = 10.0;
+  if (!activeFilters.runtime) activeFilters.runtime = 'Any';
+  if (!activeFilters.language) activeFilters.language = 'Any';
+  if (!activeFilters.country) activeFilters.country = 'Any';
+  if (!activeFilters.sort) activeFilters.sort = 'Relevance';
+
+  c.innerHTML = `
+    <div class="filter-section"><h3>STREAMING SERVICES</h3><div class="filter-pills" id="fPlatforms"></div></div>
+    <div class="filter-section"><h3>GENRES</h3><div class="filter-pills" id="fGenres"></div></div>
+    <div class="filter-section"><h3>MOOD</h3><div class="filter-pills" id="fMoods"></div></div>
+    <div class="filter-section"><h3>DECADE</h3><div class="filter-pills" id="fDecades"></div></div>
+    <div class="filter-section"><h3>RATING RANGE</h3>
+      <p style="color:var(--gold);font-size:13px;font-weight:600;margin-bottom:8px;">⭐ <span id="ratingLabel">${activeFilters.ratingMin.toFixed(1)} – ${activeFilters.ratingMax.toFixed(1)}</span></p>
+      <div style="display:flex;gap:12px;align-items:center;">
+        <input type="range" id="ratingMinSlider" min="1" max="10" step="0.5" value="${activeFilters.ratingMin}" style="flex:1;accent-color:var(--gold);">
+        <input type="range" id="ratingMaxSlider" min="1" max="10" step="0.5" value="${activeFilters.ratingMax}" style="flex:1;accent-color:var(--gold);">
+      </div>
+    </div>
+    <div class="filter-section"><h3>RUNTIME</h3><div class="filter-pills" id="fRuntime"></div></div>
+    <div class="filter-section"><h3>MPAA RATING</h3><div class="filter-pills" id="fMpaa"></div></div>
+    <div class="filter-section"><h3>LANGUAGE</h3><div class="filter-pills" id="fLang"></div></div>
+    <div class="filter-section"><h3>COUNTRY</h3><div class="filter-pills" id="fCountry"></div></div>
+    <div class="filter-section"><h3>🏆 AWARDS ONLY</h3>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+        <input type="checkbox" id="fAwards" ${activeFilters.awards ? 'checked' : ''} style="width:20px;height:20px;accent-color:var(--gold);">
+        <span style="font-size:13px;color:var(--dim);">Only show award winners/nominees</span>
+      </label>
+    </div>
+    <div class="filter-section"><h3>CAST / DIRECTOR</h3>
+      <input id="fCastInput" type="text" value="${activeFilters.castDirector || ''}" placeholder="Include movies with..." style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:13px;outline:none;">
+    </div>
+    <div class="filter-section"><h3>SORT BY</h3><div class="filter-pills" id="fSort"></div></div>
+  `;
+
+  function multiPills(containerId, items, stateKey, isEmoji) {
+    const el = document.getElementById(containerId);
+    items.forEach(item => {
+      const label = typeof item === 'object' ? `${item.e} ${item.l}` : (typeof item === 'object' && item.n ? item.n : item);
+      const val = typeof item === 'object' ? (item.l || item.n) : item;
+      const p = document.createElement('div');
+      p.className = 'pill' + (activeFilters[stateKey].includes(val) ? ' active' : '');
+      p.textContent = label;
+      p.addEventListener('click', () => {
+        const arr = activeFilters[stateKey];
+        const idx = arr.indexOf(val);
+        if (idx > -1) arr.splice(idx, 1); else arr.push(val);
+        p.classList.toggle('active');
+      });
+      el.appendChild(p);
+    });
+  }
+  function singlePills(containerId, items, stateKey) {
+    const el = document.getElementById(containerId);
+    items.forEach(val => {
+      const p = document.createElement('div');
+      p.className = 'pill' + (activeFilters[stateKey] === val ? ' active' : '');
+      p.textContent = val;
+      p.addEventListener('click', () => {
+        activeFilters[stateKey] = val;
+        el.querySelectorAll('.pill').forEach(x => x.classList.remove('active'));
+        p.classList.add('active');
+      });
+      el.appendChild(p);
+    });
+  }
+
+  multiPills('fPlatforms', PLATFORMS.map(p => p.n), 'platforms');
+  multiPills('fGenres', GENRES, 'genres');
+  multiPills('fMoods', MOODS, 'moods');
+  multiPills('fDecades', DECADES, 'decades');
+  multiPills('fMpaa', MPAA, 'mpaa');
+  singlePills('fRuntime', RUNTIMES, 'runtime');
+  singlePills('fLang', LANGUAGES, 'language');
+  singlePills('fCountry', COUNTRIES, 'country');
+  singlePills('fSort', SORT_OPTIONS, 'sort');
+
+  document.getElementById('ratingMinSlider').addEventListener('input', function() {
+    activeFilters.ratingMin = parseFloat(this.value);
+    if (activeFilters.ratingMin > activeFilters.ratingMax) activeFilters.ratingMax = activeFilters.ratingMin;
+    document.getElementById('ratingMaxSlider').value = activeFilters.ratingMax;
+    document.getElementById('ratingLabel').textContent = `${activeFilters.ratingMin.toFixed(1)} – ${activeFilters.ratingMax.toFixed(1)}`;
+  });
+  document.getElementById('ratingMaxSlider').addEventListener('input', function() {
+    activeFilters.ratingMax = parseFloat(this.value);
+    if (activeFilters.ratingMax < activeFilters.ratingMin) activeFilters.ratingMin = activeFilters.ratingMax;
+    document.getElementById('ratingMinSlider').value = activeFilters.ratingMin;
+    document.getElementById('ratingLabel').textContent = `${activeFilters.ratingMin.toFixed(1)} – ${activeFilters.ratingMax.toFixed(1)}`;
+  });
+  document.getElementById('fAwards').addEventListener('change', function() { activeFilters.awards = this.checked; });
+  document.getElementById('fCastInput').addEventListener('input', function() { activeFilters.castDirector = this.value; });
+}
+
+/* ═══════════════════════════════════════ */
+/* MOVIE DETAIL                           */
+/* ═══════════════════════════════════════ */
+function openDetail(movie) {
+  const modal = document.getElementById('detailModal');
+  modal.classList.add('open');
+  document.getElementById('detailHeader').style.background = movie.posterGradient;
+  document.getElementById('detailEmoji').textContent = movie.emoji || '🎬';
+
+  const prof = getProfile();
+  const inWl = prof && prof.watchlist.find(m => m.title === movie.title);
+  const isWatched = prof && prof.watched && prof.watched[movie.title];
+
+  const platBadges = (movie.platforms || []).map(p => {
+    const col = PLAT_COLORS[p] || '#555';
+    return `<span class="platform-badge" style="background:${col};color:${p==='Hulu'?'#000':'#fff'};margin:2px;">${p}</span>`;
+  }).join('');
+  const genrePills = (movie.genres || []).map(g => `<span style="display:inline-block;padding:4px 12px;border-radius:999px;border:1px solid var(--gold);color:var(--gold);font-size:11px;font-weight:600;">${g}</span>`).join(' ');
+
+  document.getElementById('detailBody').innerHTML = `
+    <h2 style="font-size:22px;font-weight:800;margin-bottom:6px;">${movie.title}</h2>
+    <p style="font-size:13px;color:var(--dim);margin-bottom:10px;">⭐ IMDb ${(movie.imdb_rating||movie.rating||0).toFixed(1)} / 10 · ${movie.year} · ${movie.runtime||'—'}min · ${movie.mpaa||'NR'}</p>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">${genrePills}</div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px;">${platBadges}</div>
+    ${movie.awards ? `<p style="font-size:12px;color:var(--gold);font-style:italic;margin-bottom:10px;">🏆 ${movie.awards}</p>` : ''}
+    <p style="font-size:14px;line-height:1.6;margin-bottom:10px;color:var(--text);">${movie.description || ''}</p>
+    ${movie.tagline ? `<p style="font-size:13px;color:var(--dim);font-style:italic;margin-bottom:12px;">"${movie.tagline}"</p>` : ''}
+    <p style="font-size:13px;color:var(--dim);margin-bottom:4px;"><strong style="color:var(--text);">Director:</strong> ${movie.director || '—'}</p>
+    <p style="font-size:13px;color:var(--dim);margin-bottom:4px;"><strong style="color:var(--text);">Cast:</strong> ${(movie.cast||[]).join(' · ')}</p>
+    <p style="font-size:13px;color:var(--dim);"><strong style="color:var(--text);">Language:</strong> ${movie.language||'—'} · <strong style="color:var(--text);">Country:</strong> ${movie.country||'—'}</p>
+    ${movie.budget ? `<p style="font-size:12px;color:var(--dim);margin-top:4px;">Budget: ${movie.budget} · Box Office: ${movie.boxOffice||'—'}</p>` : ''}
+  `;
+
+  const actions = document.getElementById('detailActions');
+  actions.innerHTML = '';
+  const wlBtn = document.createElement('button');
+  wlBtn.style.cssText = `flex:1;padding:12px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;border:none;min-height:44px;`;
+  if (inWl) { wlBtn.style.background = '#22c55e'; wlBtn.style.color = '#fff'; wlBtn.textContent = '✓ In Watchlist'; }
+  else { wlBtn.style.background = 'var(--accent)'; wlBtn.style.color = '#fff'; wlBtn.textContent = '❤️ Add to Watchlist'; }
+  wlBtn.addEventListener('click', () => {
+    if (!inWl && prof) { prof.watchlist.push(movie); updateTaste(prof, movie, 1); saveState(); showToast('❤️ Added!', '#22c55e'); }
+    modal.classList.remove('open');
+  });
+  actions.appendChild(wlBtn);
+
+  const watchBtn = document.createElement('button');
+  watchBtn.style.cssText = 'flex:1;padding:12px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text);min-height:44px;';
+  watchBtn.textContent = isWatched ? '✓ Watched' : '✓ Mark Watched';
+  watchBtn.addEventListener('click', () => { modal.classList.remove('open'); openRateModal(movie); });
+  actions.appendChild(watchBtn);
+}
+document.getElementById('closeDetail').addEventListener('click', () => document.getElementById('detailModal').classList.remove('open'));
+
+/* ═══════════════════════════════════════ */
+/* RATE / WATCHED MODAL                   */
+/* ═══════════════════════════════════════ */
+function openRateModal(movie) {
+  currentRateMovie = movie;
+  document.getElementById('rateTitle').textContent = `How was ${movie.title}?`;
+  document.getElementById('rateModal').classList.add('open');
+
+  let selectedRating = 0;
+  const starsC = document.getElementById('rateStars');
+  starsC.innerHTML = '';
+  for (let i = 1; i <= 5; i++) {
+    const star = document.createElement('span');
+    star.className = 'star';
+    star.textContent = '★';
+    star.addEventListener('click', () => {
+      selectedRating = i;
+      starsC.querySelectorAll('.star').forEach((s, idx) => s.classList.toggle('filled', idx < i));
+    });
+    starsC.appendChild(star);
+  }
+
+  let selectedReaction = '';
+  const reactC = document.getElementById('rateReactions');
+  reactC.innerHTML = '';
+  REACTIONS.forEach(r => {
+    const pill = document.createElement('div');
+    pill.className = 'pill';
+    pill.textContent = r;
+    pill.addEventListener('click', () => {
+      selectedReaction = r;
+      reactC.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+    });
+    reactC.appendChild(pill);
+  });
+
+  document.getElementById('rateReview').value = '';
+
+  const saveHandler = () => {
+    const prof = getProfile();
+    if (prof) {
+      prof.watched[movie.title] = {
+        rating: selectedRating, reaction: selectedReaction,
+        review: document.getElementById('rateReview').value,
+        date: new Date().toISOString()
+      };
+      if (!prof.watchlist.find(m => m.title === movie.title)) prof.watchlist.push(movie);
+      saveState();
+      showToast(`✓ Marked as watched${selectedRating ? ' · ★' + selectedRating : ''}`, '#22c55e');
+    }
+    document.getElementById('rateModal').classList.remove('open');
+    document.getElementById('rateSave').removeEventListener('click', saveHandler);
+  };
+  const skipHandler = () => {
+    const prof = getProfile();
+    if (prof) {
+      prof.watched[movie.title] = { rating: 0, reaction: '', review: '', date: new Date().toISOString() };
+      saveState();
+    }
+    document.getElementById('rateModal').classList.remove('open');
+    document.getElementById('rateSkip').removeEventListener('click', skipHandler);
+  };
+  document.getElementById('rateSave').addEventListener('click', saveHandler);
+  document.getElementById('rateSkip').addEventListener('click', skipHandler);
+}
+
+/* ═══════════════════════════════════════ */
+/* WATCHLIST TAB                          */
+/* ═══════════════════════════════════════ */
+function renderWatchlist() {
+  const prof = getProfile();
+  if (!prof) return;
+
+  // Render filter scroll
+  const scroll = document.getElementById('wlFilterScroll');
+  scroll.innerHTML = '';
+  const filters = ['All','❤️ Liked','⭐ Super Liked','✓ Watched','★ Rated'];
+  let activeWlFilter = 'All';
+  filters.forEach(f => {
+    const p = document.createElement('div');
+    p.className = 'pill' + (f === 'All' ? ' active' : '');
+    p.textContent = f;
+    p.addEventListener('click', () => {
+      activeWlFilter = f;
+      scroll.querySelectorAll('.pill').forEach(x => x.classList.remove('active'));
+      p.classList.add('active');
+      renderWlCards(activeWlFilter);
+    });
+    scroll.appendChild(p);
+  });
+  renderWlCards('All');
+}
+
+function renderWlCards(filter) {
+  const prof = getProfile();
+  let items = [...prof.watchlist];
+  if (filter === '⭐ Super Liked') items = items.filter(m => prof.superlikes.find(s => s.title === m.title));
+  else if (filter === '✓ Watched') items = items.filter(m => prof.watched[m.title]);
+  else if (filter === '★ Rated') items = items.filter(m => prof.watched[m.title] && prof.watched[m.title].rating > 0);
+
+  const sort = document.getElementById('wlSort').value;
+  if (sort === 'rating') items.sort((a, b) => (b.imdb_rating||b.rating||0) - (a.imdb_rating||a.rating||0));
+  else if (sort === 'title') items.sort((a, b) => a.title.localeCompare(b.title));
+
+  const grid = document.getElementById('watchlistGrid');
+  const empty = document.getElementById('wlEmpty');
+  grid.innerHTML = '';
+  if (items.length === 0) { empty.style.display = 'block'; grid.style.display = 'none'; return; }
+  empty.style.display = 'none'; grid.style.display = 'grid';
+
+  items.forEach(movie => {
+    const isSuper = prof.superlikes.find(s => s.title === movie.title);
+    const watched = prof.watched[movie.title];
+    const card = document.createElement('div');
+    card.className = 'wl-card';
+    const stars = watched && watched.rating ? '★'.repeat(watched.rating) + '☆'.repeat(5 - watched.rating) : '';
+    card.innerHTML = `
+      <div style="height:80px;background:${movie.posterGradient};display:flex;align-items:center;justify-content:center;font-size:32px;position:relative;">
+        ${movie.emoji || '🎬'}
+        ${isSuper ? '<div style="position:absolute;top:4px;right:4px;font-size:16px;">⭐</div>' : ''}
+        ${watched ? '<div style="position:absolute;top:4px;left:4px;background:rgba(34,197,94,0.8);color:#fff;font-size:9px;padding:2px 6px;border-radius:4px;font-weight:600;">✓</div>' : ''}
+      </div>
+      <div style="padding:10px;">
+        <p style="font-size:13px;font-weight:700;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${movie.title}</p>
+        <p style="font-size:11px;color:var(--dim);">${movie.year} · ⭐ ${(movie.imdb_rating||movie.rating||0).toFixed(1)}</p>
+        ${stars ? `<p style="font-size:11px;color:var(--gold);margin-top:3px;">${stars}</p>` : ''}
+        ${movie.platforms && movie.platforms[0] ? `<span class="platform-badge" style="background:${PLAT_COLORS[movie.platforms[0]]||'#555'};font-size:9px;margin-top:4px;">${movie.platforms[0]}</span>` : ''}
+      </div>`;
+    card.addEventListener('click', () => openDetail(movie));
+    grid.appendChild(card);
+  });
+}
+document.getElementById('wlSort').addEventListener('change', () => renderWatchlist());
+document.getElementById('wlGoDiscover').addEventListener('click', () => switchTab('discover'));
+
+/* ═══════════════════════════════════════ */
+/* SEARCH TAB                             */
+/* ═══════════════════════════════════════ */
+let searchLoaded = false;
+async function loadSearchDefaults() {
+  if (searchLoaded) return;
+  searchLoaded = true;
+  // Load trending
+  try {
+    const res = await AppSDK.ai.chat({ messages: [{ role: 'user', content: 'Return 8 popular trending movies from 2023-2026 as a JSON array with fields: title, year, rating, genres, emoji, posterGradient, platforms, runtime, mpaa, director, cast, description, tagline, imdb_rating. Return ONLY valid JSON, no markdown.' }] });
+    let c = res.content.trim();
+    if (c.startsWith('```')) c = c.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+    const movies = JSON.parse(c);
+    const row = document.getElementById('trendingRow');
+    row.innerHTML = '';
+    movies.forEach(m => {
+      if (!m.posterGradient) m.posterGradient = GENRE_GRADIENTS[m.genres?.[0]] || 'linear-gradient(135deg,#1a1a2e,#e94560)';
+      if (!m.emoji) m.emoji = '🎬';
+      const card = document.createElement('div');
+      card.style.cssText = `min-width:140px;border-radius:12px;overflow:hidden;cursor:pointer;flex-shrink:0;`;
+      card.innerHTML = `<div style="height:100px;background:${m.posterGradient};display:flex;align-items:center;justify-content:center;font-size:36px;">${m.emoji}</div>
+        <div style="padding:8px;background:var(--surface2);"><p style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${m.title}</p><p style="font-size:10px;color:var(--dim);">${m.year} · ⭐${(m.imdb_rating||m.rating||0).toFixed?.(1)||'?'}</p></div>`;
+      card.addEventListener('click', () => openDetail(m));
+      row.appendChild(card);
+    });
+    // New releases
+    const grid = document.getElementById('newReleasesGrid');
+    grid.innerHTML = '';
+    movies.slice(0, 4).forEach(m => {
+      const card = document.createElement('div');
+      card.className = 'wl-card';
+      card.innerHTML = `<div style="height:70px;background:${m.posterGradient};display:flex;align-items:center;justify-content:center;font-size:28px;">${m.emoji}</div>
+        <div style="padding:8px;"><p style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${m.title}</p><p style="font-size:10px;color:var(--dim);">${m.year}</p></div>`;
+      card.addEventListener('click', () => openDetail(m));
+      grid.appendChild(card);
+    });
+  } catch(e) { console.error('Search defaults error:', e); }
+}
+
+document.getElementById('searchInput').addEventListener('input', function() {
+  clearTimeout(searchDebounce);
+  const q = this.value.trim();
+  if (q.length < 3) {
+    document.getElementById('searchResults').innerHTML = '';
+    document.getElementById('searchDefault').style.display = 'block';
+    return;
+  }
+  document.getElementById('searchDefault').style.display = 'none';
+  document.getElementById('searchResults').innerHTML = '<div style="text-align:center;padding:40px;"><div class="shimmer" style="width:60px;height:60px;border-radius:50%;margin:0 auto 12px;"></div><p style="color:var(--dim);font-size:13px;">Searching...</p></div>';
+  searchDebounce = setTimeout(async () => {
+    try {
+      const res = await AppSDK.ai.chat({ messages: [{ role: 'user', content: `Return 8 movies matching search query "${q}" as a JSON array with fields: title, year, rating, imdb_rating, genres, emoji, posterGradient, platforms, runtime, mpaa, director, cast, description, tagline, mood, decade, language, country, awards. Return ONLY valid JSON, no markdown.` }] });
+      let c = res.content.trim();
+      if (c.startsWith('```')) c = c.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+      const movies = JSON.parse(c);
+      const container = document.getElementById('searchResults');
+      container.innerHTML = `<p style="font-size:13px;color:var(--dim);margin-bottom:12px;">${movies.length} results for "${q}"</p>`;
+      const grid = document.createElement('div');
+      grid.className = 'wl-grid';
+      grid.style.padding = '0';
+      movies.forEach(m => {
+        if (!m.posterGradient) m.posterGradient = GENRE_GRADIENTS[m.genres?.[0]] || 'linear-gradient(135deg,#1a1a2e,#e94560)';
+        if (!m.emoji) m.emoji = '🎬';
+        const card = document.createElement('div');
+        card.className = 'wl-card';
+        card.innerHTML = `<div style="height:80px;background:${m.posterGradient};display:flex;align-items:center;justify-content:center;font-size:32px;">${m.emoji}</div>
+          <div style="padding:10px;"><p style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${m.title}</p><p style="font-size:11px;color:var(--dim);">${m.year} · ⭐ ${(m.imdb_rating||m.rating||0).toFixed?.(1)||'?'}</p></div>`;
+        card.addEventListener('click', () => openDetail(m));
+        grid.appendChild(card);
+      });
+      container.appendChild(grid);
+    } catch(e) {
+      document.getElementById('searchResults').innerHTML = '<p style="text-align:center;color:var(--accent);padding:40px;">Search failed. Try again.</p>';
+    }
+  }, 600);
+});
+
+/* ═══════════════════════════════════════ */
+/* STATS TAB                              */
+/* ═══════════════════════════════════════ */
+function renderStats() {
+  const prof = getProfile();
+  if (!prof) return;
+  const totalSwiped = prof.swipeHistory.length;
+  const liked = prof.watchlist.length;
+  const supers = prof.superlikes.length;
+  const watchedCount = Object.keys(prof.watched).length;
+  const skipped = prof.swipeHistory.filter(s => s.action === 'skip').length;
+  const ratings = Object.values(prof.watched).filter(w => w.rating > 0).map(w => w.rating);
+  const avgRating = ratings.length ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : '—';
+
+  document.getElementById('statsOverview').innerHTML = [
+    { e: '🎬', v: totalSwiped, l: 'Swiped' },
+    { e: '❤️', v: liked, l: 'Liked' },
+    { e: '⭐', v: supers, l: 'Super' },
+    { e: '✓', v: watchedCount, l: 'Watched' },
+    { e: '⭐', v: avgRating, l: 'Avg Rating' },
+    { e: '👎', v: skipped, l: 'Skipped' }
+  ].map(s => `<div style="min-width:90px;flex-shrink:0;background:var(--surface2);border-radius:12px;padding:14px;text-align:center;">
+    <div style="font-size:20px;">${s.e}</div>
+    <div style="font-size:22px;font-weight:800;color:var(--gold);margin:4px 0;">${s.v}</div>
+    <div style="font-size:10px;color:var(--dim);">${s.l}</div>
+  </div>`).join('');
+
+  // Taste title
+  const t = prof.tasteProfile.genres;
+  const topGenre = Object.entries(t).sort((a, b) => b[1] - a[1])[0];
+  const titles = {
+    'Horror': { t: 'The Horror Hound', e: '👻' }, 'Thriller': { t: 'The Thrill Seeker', e: '😬' },
+    'Romance': { t: 'The Hopeless Romantic', e: '💕' }, 'Sci-Fi': { t: 'The Sci-Fi Geek', e: '🚀' },
+    'Comedy': { t: 'The Comedy Fan', e: '😂' }, 'Drama': { t: 'The Deep Thinker', e: '🤔' },
+    'Action': { t: 'The Blockbuster Lover', e: '🔥' }, 'Animation': { t: 'The Animation Lover', e: '✨' },
+    'Documentary': { t: 'The Knowledge Seeker', e: '📚' }, 'Fantasy': { t: 'The Dreamer', e: '🧙' }
+  };
+  const taste = topGenre ? (titles[topGenre[0]] || { t: 'The Cinephile', e: '🎬' }) : { t: 'Start Swiping!', e: '🍿' };
+  document.getElementById('tasteTitleCard').innerHTML = `
+    <div style="font-size:48px;margin-bottom:8px;">${taste.e}</div>
+    <h3 style="font-size:20px;font-weight:800;color:var(--gold);">${taste.t}</h3>
+    <p style="font-size:12px;color:var(--dim);margin-top:4px;">Based on ${liked} movies liked</p>`;
+
+  // Genre bars
+  const genreEntries = Object.entries(t).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const maxG = genreEntries.length ? Math.max(...genreEntries.map(e => e[1])) : 1;
+  document.getElementById('genreBars').innerHTML = genreEntries.map(([g, v]) =>
+    `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <span style="width:80px;font-size:12px;color:var(--dim);text-align:right;">${g}</span>
+      <div style="flex:1;height:24px;background:var(--surface2);border-radius:6px;overflow:hidden;">
+        <div class="stat-bar" style="width:${(v / maxG * 100)}%;"></div>
+      </div>
+      <span style="font-size:12px;color:var(--dim);width:30px;">${Math.round(v)}</span>
+    </div>`
+  ).join('') || '<p style="font-size:13px;color:var(--dim);">No data yet — start swiping!</p>';
+
+  // Decade bars
+  const decEntries = Object.entries(prof.tasteProfile.decades || {}).sort((a, b) => b[1] - a[1]);
+  const maxD = decEntries.length ? Math.max(...decEntries.map(e => e[1])) : 1;
+  document.getElementById('decadeBars').innerHTML = decEntries.map(([d, v]) =>
+    `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <span style="width:80px;font-size:12px;color:var(--dim);text-align:right;">${d}</span>
+      <div style="flex:1;height:24px;background:var(--surface2);border-radius:6px;overflow:hidden;">
+        <div class="stat-bar" style="width:${(v / maxD * 100)}%;background:var(--accent);"></div>
+      </div>
+      <span style="font-size:12px;color:var(--dim);width:30px;">${Math.round(v)}</span>
+    </div>`
+  ).join('') || '<p style="font-size:13px;color:var(--dim);">No data yet</p>';
+
+  // Rating distribution
+  const dist = [0, 0, 0, 0, 0];
+  Object.values(prof.watched).forEach(w => { if (w.rating > 0) dist[w.rating - 1]++; });
+  const maxR = Math.max(...dist, 1);
+  document.getElementById('ratingDist').innerHTML = dist.map((v, i) =>
+    `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <span style="width:40px;font-size:12px;color:var(--gold);text-align:right;">${'★'.repeat(i+1)}</span>
+      <div style="flex:1;height:20px;background:var(--surface2);border-radius:6px;overflow:hidden;">
+        <div style="height:100%;width:${(v / maxR * 100)}%;background:var(--gold);border-radius:6px;transition:width 0.6s ease;"></div>
+      </div>
+      <span style="font-size:12px;color:var(--dim);width:24px;">${v}</span>
+    </div>`
+  ).join('');
+}
+
+/* ═══════════════════════════════════════ */
+/* PROFILE TAB                            */
+/* ═══════════════════════════════════════ */
+function renderProfileTab() {
+  const prof = getProfile();
+  if (!prof) return;
+  document.getElementById('profAvatar').textContent = prof.avatar;
+  document.getElementById('profName').textContent = prof.name;
+  document.getElementById('profWlCount').textContent = prof.watchlist.length;
+  document.getElementById('profWatchedCount').textContent = Object.keys(prof.watched).length;
+  const ratings = Object.values(prof.watched).filter(w => w.rating > 0).map(w => w.rating);
+  document.getElementById('profAvgRating').textContent = ratings.length ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : '—';
+}
+
+document.getElementById('profEdit').addEventListener('click', () => {
+  const prof = getProfile();
+  if (!prof) return;
+  openCreateProfile();
+  document.getElementById('profileNameInput').value = prof.name;
+  const saveBtn = document.getElementById('createProfileBtn');
+  saveBtn.textContent = 'Save Changes';
+  // Override handler
+  const handler = () => {
+    prof.name = document.getElementById('profileNameInput').value.trim() || prof.name;
+    // Avatar already updates via picker
+    saveState();
+    document.getElementById('createProfileModal').classList.remove('open');
+    renderProfileTab();
+  };
+  saveBtn.addEventListener('click', handler, { once: true });
+});
+
+document.getElementById('switchProfile').addEventListener('click', () => {
+  STATE.currentProfile = null;
+  saveState();
+  showView('profileView');
+  renderProfiles();
+});
+
+document.getElementById('deleteProfile').addEventListener('click', () => {
+  showConfirm('Delete this profile? This cannot be undone.', () => {
+    delete STATE.profiles[STATE.currentProfile];
+    STATE.currentProfile = null;
+    saveState();
+    showView('profileView');
+    renderProfiles();
+  });
+});
+
+document.getElementById('clearHistory').addEventListener('click', () => {
+  showConfirm('Clear all swipe history?', () => {
+    const prof = getProfile();
+    if (prof) { prof.swipeHistory = []; prof.seenIds = []; seenIds = []; saveState(); showToast('History cleared', '#3b82f6'); }
+  });
+});
+
+document.getElementById('exportWl').addEventListener('click', () => {
+  const prof = getProfile();
+  if (!prof) return;
+  const data = JSON.stringify({ watchlist: prof.watchlist, watched: prof.watched }, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `cineswipe-watchlist-${prof.name}.json`; a.click();
+  URL.revokeObjectURL(url);
+  showToast('Watchlist exported!', '#3b82f6');
+});
+
+document.getElementById('animSpeed').addEventListener('change', function() {
+  const speeds = { fast: 250, normal: 400, slow: 600 };
+  animDuration = speeds[this.value] || 400;
+});
+
+/* ═══════════════════════════════════════ */
+/* GROUP MODE                             */
+/* ═══════════════════════════════════════ */
+document.getElementById('groupBtn').addEventListener('click', () => {
+  const modal = document.getElementById('groupModal');
+  modal.classList.add('open');
+  groupMode.players = ['Player 1', 'Player 2'];
+  renderGroupPlayers();
+});
+document.getElementById('closeGroup').addEventListener('click', () => document.getElementById('groupModal').classList.remove('open'));
+document.getElementById('addPlayer').addEventListener('click', () => {
+  if (groupMode.players.length < 6) { groupMode.players.push(`Player ${groupMode.players.length + 1}`); renderGroupPlayers(); }
+});
+
+function renderGroupPlayers() {
+  const c = document.getElementById('groupPlayers');
+  c.innerHTML = '';
+  groupMode.players.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;';
+    row.innerHTML = `<input type="text" value="${p}" style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;outline:none;" data-pidx="${i}">
+      ${i > 1 ? '<button style="background:none;border:none;color:var(--accent);font-size:18px;cursor:pointer;padding:0 8px;">✕</button>' : ''}`;
+    row.querySelector('input').addEventListener('input', function() { groupMode.players[i] = this.value; });
+    const del = row.querySelector('button');
+    if (del) del.addEventListener('click', () => { groupMode.players.splice(i, 1); renderGroupPlayers(); });
+    c.appendChild(row);
+  });
+}
+
+document.getElementById('startGroup').addEventListener('click', () => {
+  groupMode.active = true;
+  groupMode.currentPlayer = 0;
+  groupMode.votes = {};
+  document.getElementById('groupModal').classList.remove('open');
+  showToast(`${groupMode.players[0]}'s turn!`, '#3b82f6');
+});
+
+function showGroupResults() {
+  const matches = [];
+  Object.entries(groupMode.votes).forEach(([title, votes]) => {
+    const allLiked = Object.values(votes).every(v => v === 'like' || v === 'super');
+    if (allLiked) matches.push(title);
+  });
+  groupMode.active = false;
+
+  // Show confetti
+  for (let i = 0; i < 40; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.cssText = `left:${Math.random()*100}%;top:-10px;background:${['#e50914','#f0b429','#22c55e','#3b82f6','#a855f7'][Math.floor(Math.random()*5)]};border-radius:${Math.random()>0.5?'50%':'2px'};width:${8+Math.random()*8}px;height:${8+Math.random()*8}px;animation:confettiFall ${1.5+Math.random()*2}s linear forwards;animation-delay:${Math.random()*0.5}s;`;
+    document.body.appendChild(piece);
+    setTimeout(() => piece.remove(), 4000);
+  }
+
+  const stack = document.getElementById('cardStack');
+  stack.innerHTML = `<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;">
+    <div style="font-size:48px;margin-bottom:16px;">🎉</div>
+    <h3 style="font-size:20px;font-weight:700;margin-bottom:8px;">${matches.length > 0 ? `You all agree on ${matches.length} movie${matches.length>1?'s':''}!` : 'No matches this round!'}</h3>
+    ${matches.map(t => `<p style="color:var(--gold);font-size:15px;font-weight:600;">${t}</p>`).join('')}
+    ${matches.length === 0 ? '<p style="color:var(--dim);font-size:13px;margin-top:8px;">Try relaxing your filters</p>' : ''}
+    <button id="groupAgain" style="background:var(--gold);color:#0d1117;border:none;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;margin-top:20px;">Play Again</button>
+  </div>`;
+  document.getElementById('groupAgain').addEventListener('click', () => { deck = []; fetchMovies(); });
+}
+
+/* ═══════════════════════════════════════ */
+/* BOOT                                   */
+/* ═══════════════════════════════════════ */
+function boot() {
+  if (!STATE._onboarded) {
+    showView('onboardingView');
+    renderOnboardGenres();
+  } else if (!STATE.currentProfile || !STATE.profiles[STATE.currentProfile]) {
+    showView('profileView');
+    renderProfiles();
+  } else {
+    selectProfile(STATE.currentProfile);
+  }
+  updateFilterBadge();
+}
+boot();
+</script>
+</body>
+</html>
