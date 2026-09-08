@@ -1,89 +1,77 @@
-# CineSwipe
+# 🎬 CineSwipe — Movie Discovery
 
-A movie recommendation app. Swipe right to like, left to pass, until you land on something to watch tonight. Couple mode finds movies both of you want.
+> Swipe right on movies you want to watch. Swipe left on ones you don't. Your taste engine learns with every swipe.
 
-## What is real now
+**[▶️ Try it live →](https://majinboux.github.io/cineswipe/CineSwipe_v3_tmdb.html)**
 
-Built with FastAPI (Python) backend and React/Vite frontend. Working as of 2026-08-22.
+---
 
-- Swipe UI with a 40-film curated local library across 12 genres and 10 moods
-- Genre and mood filtering, plus a streaming-service filter
-- Match overlay on every right swipe
-- Movie detail sheet with synopsis, runtime, genres, moods, streaming tags
-- JWT auth (bcrypt), watch history, watchlist, couple linking via invite
-- Couple Match Mode (Tonight's Pick): both linked accounts swipe right on the same film and the match fires over a live WebSocket -- verified end-to-end with real accounts
-- AI chat wired to Qwen 3.7 Flash via OpenRouter (thinking mode disabled -- had to fix that)
-- Couple invite email via R510 self-hosted SMTP relay
-- 25 backend tests, all passing (no MongoDB or API key required)
-- `npm run build` clean: 1647 modules, no errors
+## What It Does
+
+CineSwipe is a Tinder-style movie discovery app. Swipe through movies, build a watchlist, and let the AI taste engine learn what you actually like. Connect a free TMDB API key and get real movie posters, live IMDb ratings, and actual streaming availability for Netflix, HBO Max, Disney+, Prime, Hulu, and 10 more services.
+
+---
+
+## Features
+
+- 🎬 **Swipe deck** — drag physics, like / skip / super like, keyboard shortcuts
+- 🎛️ **20+ filters** — genre, streaming service, decade, rating, runtime, MPAA, language, awards
+- 🧠 **Taste engine** — learns your preferences, re-sorts the deck, shows match %
+- 👤 **Multi-profile accounts** — up to 6 profiles, each with their own watchlist and taste data
+- ✅ **Watched + ratings** — 5-star ratings, reactions, review text, date watched
+- 📊 **Stats tab** — genre breakdown, platform preferences, watch history, taste title
+- 👥 **Group mode** — 2-6 players take turns swiping, see what everyone agrees on
+- 🔍 **Search** — live TMDB search, trending now, new releases
+- 📱 **Mobile-first** — works great on iPhone and Android in the browser
+
+---
+
+## Quick Start
+
+1. **[Open the live app](https://majinboux.github.io/cineswipe/CineSwipe_v3_tmdb.html)** in any browser
+2. **Get a free TMDB API key** at [themoviedb.org/settings/api](https://www.themoviedb.org/settings/api) — takes 2 minutes
+3. **Paste your key** when prompted → real posters and live data turn on instantly
+4. **Start swiping** 🎬
+
+> Works with AI-generated data even without a TMDB key.
+
+---
+
+## Streaming Services Supported
+
+Netflix · HBO Max · Disney+ · Prime Video · Hulu · Peacock · Paramount+ · Apple TV+ · Showtime · AMC+ · Crunchyroll · Tubi · Pluto TV · Kanopy
+
+---
+
+## Files
+
+| File | Description |
+|------|-------------|
+| `CineSwipe_v3_tmdb.html` | ✅ **Use this one** — real TMDB data, full features |
+| `CineSwipe_v3.html` | AI-powered fallback, no API key needed |
+| `CineSwipe_v2.html` | Earlier version — 64 embedded movies |
+| `CineSwipe.html` | Original prototype |
+
+---
+
+## Also on This Repo
+
+The `CineSwipe/` folder on Ryan's machine contains a full **FastAPI + React** production app:
+- FastAPI backend, Motor/MongoDB, JWT auth, WebSockets
+- React 18 + Vite frontend (1647 modules, clean build)
+- 25 backend tests, all passing
+- Couple Match Mode via live WebSocket
+- AI chat via Qwen on OpenRouter
+- Self-hosted SMTP for couple invites
+
+---
 
 ## Stack
 
-| Layer | What |
-|---|---|
-| Backend | FastAPI, Python 3.11, Motor/MongoDB, JWT/bcrypt, WebSockets |
-| Frontend | React 18, Vite, Tailwind CSS, shadcn/ui-style primitives |
-| AI chat | OpenRouter -- `qwen/qwen3.7-flash` |
-| Email | Self-hosted SMTP relay |
-| Tests | pytest, 25 tests |
+- Vanilla JS + HTML + CSS (prototype — zero build step)
+- [TMDB API](https://www.themoviedb.org/documentation/api) — posters, ratings, streaming providers
+- FastAPI + React 18 (full production app, local)
 
-## Structure
+---
 
-```
-CineSwipe/
-  backend/
-    server.py           FastAPI entry -- all routes + middleware
-    movie_service.py    Filtering, TMDB/OMDb integration (inactive without keys)
-    movies_data.py      40-film curated local library
-    models.py           Pydantic models
-    auth.py             JWT + bcrypt
-    database.py         Motor/MongoDB connection
-    ai_chat_service.py  OpenRouter Qwen chat
-    email_service.py    SMTP invite email
-    tests/              25 passing tests
-  frontend/
-    src/
-      pages/            SwipePage, AuthPage, HistoryPage, SettingsPage, WatchlistPage
-      components/       SwipeCard, MatchOverlay, MovieDetailSheet, AIChatSheet, BottomNav
-      context/          AuthContext
-      hooks/            useSwipeGesture, useApiData
-      lib/              api client, utils
-      constants/        genres, moods, streaming services
-```
-
-## Run it
-
-```bash
-cd backend
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-copy .env.example .env
-python -m uvicorn server:app --host 0.0.0.0 --port 8001 --reload
-```
-
-```bash
-cd frontend
-npm install
-copy .env.example .env
-npm run dev
-```
-
-Frontend at `http://localhost:3000`. Backend health: `http://localhost:8001/api/health`.
-
-Tests (no MongoDB or API key needed):
-```bash
-cd backend && pytest
-```
-
-## What still needs work
-
-- TMDB and OMDb API keys to pull live movie data (hooks are wired, inactive without keys)
-- MongoDB for auth, history, watchlist, couple linking (app serves local library without it)
-- Streaming availability is representative data, not live-verified per title
-- No real poster art without a TMDB image key (gradient placeholder is shown instead)
-- Store submission
-
-## Source
-
-`C:\Users\ryand\OneDrive\CineSwipe` on Ryan's machine. Part of Dancz Ministries LLC.
+*Built by [Dancz Ministries](https://danczministries.com)*
