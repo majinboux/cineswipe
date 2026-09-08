@@ -1,80 +1,89 @@
-#  CineSwipe
-### Swipe-Based Movie Discovery App  Dancz Ministries LLC
+# CineSwipe
 
-> Swipe right on movies you want to watch. Swipe left on ones you don't. Let your taste build itself.
->
-> CineSwipe is a swipe-based movie and TV discovery app that learns your taste through your swipes and builds a personalized watchlist automatically  no search, no scrolling, no decision fatigue. Platform-agnostic across Netflix, Hulu, Prime, Max, Disney+, and Apple TV+.
->
-> ---
->
-> ##  The Problem
->
-> 85M+ US streaming subscribers. Every one of them opens an app, scrolls for 20 minutes, and watches nothing. Decision fatigue is a real, documented phenomenon  and every streaming platform makes it worse. CineSwipe solves it with one mechanic: swipe.
->
-> ---
->
-> ##  Core Features
->
-> - **Swipe-to-discover**  movie poster, title, year, rating, one-line hook. Decide in under 2 seconds
-> - - **Taste engine**  learns genre, director, decade, tone from your swipe history. Gets better every session
->   - - **Watchlist**  auto-organized by streaming platform so you know exactly where to watch
->     - - **Group mode**  swipe with your partner or family. CineSwipe finds the overlap
->       - - **Watch Now**  deep links directly into the streaming app
->         - - **Mood filter**  funny / scary / short / feel-good pre-filters the deck
->          
->           - ---
->
-> ##  Business Model
->
-> | Stream | Details |
-> |--------|---------|
-> | Freemium | Free: 20 swipes/day, basic watchlist |
-> | Premium $3.99/mo | Unlimited swipes, group mode, mood filters, offline watchlist |
-> | Affiliate | Commission from streaming referrals (Apple, Amazon affiliate programs) |
-> | Promoted Titles | Studios pay to surface new releases in the swipe deck |
->
-> ---
->
-> ##  Tech Stack
->
-> | Layer | Tech |
-> |-------|------|
-> | Mobile | React Native (iOS + Android) |
-> | Movie Data | TMDB API  500k+ titles with posters |
-> | Streaming | Watchmode API  real-time availability by platform |
-> | Backend | Supabase (Postgres + Auth + Storage) |
-> | Taste Algorithm | Collaborative filtering on swipe history |
-> | Deep Links | Universal Links (iOS) + App Links (Android) |
->
-> ---
->
-> ##  What's in This Repo
->
-> | File | Description |
-> |------|-------------|
-> | `docs/CineSwipe_Project_Summary.docx` | Full project summary  concept, market, tech, monetization |
->
-> ---
->
-> ##  Roadmap
->
-> - [ ] TMDB API integration for movie card data
-> - [ ] - [ ] Swipe UI  React Native Animated + Gesture Handler
-> - [ ] - [ ] Taste engine  genre/director/decade weighting
-> - [ ] - [ ] Streaming availability lookup via Watchmode
-> - [ ] - [ ] Watchlist organized by platform
-> - [ ] - [ ] Group swipe mode with real-time match detection
-> - [ ] - [ ] Mood filter UI
-> - [ ] - [ ] App Store + Google Play submission
->
-> - [ ] ---
->
-> - [ ] ##  Links
->
-> - [ ] - **Dancz Ministries**  [danczministries.com](https://danczministries.com)
-> - [ ] - **All Projects**  [dancz-projects](https://github.com/majinboux/dancz-projects)
-> - [ ] - **Contact**  ryan@danczministries.com
->
-> - [ ] ---
->
-> - [ ] *Built by Ryan Dancz  100% P&T disabled veteran, founder Dancz Ministries LLC, Lugoff SC.*
+A movie recommendation app. Swipe right to like, left to pass, until you land on something to watch tonight. Couple mode finds movies both of you want.
+
+## What is real now
+
+Built with FastAPI (Python) backend and React/Vite frontend. Working as of 2026-08-22.
+
+- Swipe UI with a 40-film curated local library across 12 genres and 10 moods
+- Genre and mood filtering, plus a streaming-service filter
+- Match overlay on every right swipe
+- Movie detail sheet with synopsis, runtime, genres, moods, streaming tags
+- JWT auth (bcrypt), watch history, watchlist, couple linking via invite
+- Couple Match Mode (Tonight's Pick): both linked accounts swipe right on the same film and the match fires over a live WebSocket -- verified end-to-end with real accounts
+- AI chat wired to Qwen 3.7 Flash via OpenRouter (thinking mode disabled -- had to fix that)
+- Couple invite email via R510 self-hosted SMTP relay
+- 25 backend tests, all passing (no MongoDB or API key required)
+- `npm run build` clean: 1647 modules, no errors
+
+## Stack
+
+| Layer | What |
+|---|---|
+| Backend | FastAPI, Python 3.11, Motor/MongoDB, JWT/bcrypt, WebSockets |
+| Frontend | React 18, Vite, Tailwind CSS, shadcn/ui-style primitives |
+| AI chat | OpenRouter -- `qwen/qwen3.7-flash` |
+| Email | Self-hosted SMTP relay |
+| Tests | pytest, 25 tests |
+
+## Structure
+
+```
+CineSwipe/
+  backend/
+    server.py           FastAPI entry -- all routes + middleware
+    movie_service.py    Filtering, TMDB/OMDb integration (inactive without keys)
+    movies_data.py      40-film curated local library
+    models.py           Pydantic models
+    auth.py             JWT + bcrypt
+    database.py         Motor/MongoDB connection
+    ai_chat_service.py  OpenRouter Qwen chat
+    email_service.py    SMTP invite email
+    tests/              25 passing tests
+  frontend/
+    src/
+      pages/            SwipePage, AuthPage, HistoryPage, SettingsPage, WatchlistPage
+      components/       SwipeCard, MatchOverlay, MovieDetailSheet, AIChatSheet, BottomNav
+      context/          AuthContext
+      hooks/            useSwipeGesture, useApiData
+      lib/              api client, utils
+      constants/        genres, moods, streaming services
+```
+
+## Run it
+
+```bash
+cd backend
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+copy .env.example .env
+python -m uvicorn server:app --host 0.0.0.0 --port 8001 --reload
+```
+
+```bash
+cd frontend
+npm install
+copy .env.example .env
+npm run dev
+```
+
+Frontend at `http://localhost:3000`. Backend health: `http://localhost:8001/api/health`.
+
+Tests (no MongoDB or API key needed):
+```bash
+cd backend && pytest
+```
+
+## What still needs work
+
+- TMDB and OMDb API keys to pull live movie data (hooks are wired, inactive without keys)
+- MongoDB for auth, history, watchlist, couple linking (app serves local library without it)
+- Streaming availability is representative data, not live-verified per title
+- No real poster art without a TMDB image key (gradient placeholder is shown instead)
+- Store submission
+
+## Source
+
+`C:\Users\ryand\OneDrive\CineSwipe` on Ryan's machine. Part of Dancz Ministries LLC.
