@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="dark" />
+<title>CineSwipe — Movie Discovery</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest" defer></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        bg: { DEFAULT:'#0d1117', surface:'#161b22', surface2:'#21262d', border:'#30363d' },
+        accent: { DEFAULT:'#e50914', light:'#ff2d3a', dark:'#b0060f' },
+        gold: { DEFAULT:'#f0b429', light:'#fcd34d', dark:'#b8860b' },
+        txt: { DEFAULT:'#e6edf3', dim:'#8b949e', muted:'#484f58' }
+      },
+      fontFamily: { sans:['system-ui','sans-serif'] }
+    }
+  }
+};
+</script>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:#0d1117;color:#e6edf3;font-family:system-ui,sans-serif;overflow-x:hidden;user-select:none;-webkit-user-select:none}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:#161b22}
+::-webkit-scrollbar-thumb{background:#30363d;border-radius:4px}
+.no-scroll{overflow:hidden}
+.card-stack{position:relative;width:min(85vw,380px);height:65vh;max-height:560px;min-height:420px}
+.swipe-card{position:absolute;width:100%;height:100%;border-radius:1rem;overflow:hidden;touch-action:none;will-change:transform;transition:none;cursor:grab}
+.swipe-card.behind{pointer-events:none}
+.swipe-card:active{cursor:grabbing}
+.card-gradient{position:absolute;inset:0;z-index:0}
+.card-content{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;justify-content:flex-end;padding:1.25rem;background:linear-gradient(to top,rgba(0,0,0,.85) 0%,rgba(0,0,0,.5) 40%,rgba(0,0,0,.15) 70%,transparent 100%)}
+.card-emoji{position:absolute;top:50%;left:50%;transform:translate(-50%,-70%);font-size:64px;z-index:1;filter:drop-shadow(0 4px 12px rgba(0,0,0,.5));opacity:.9}
+.swipe-overlay{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;border-radius:1rem;pointer-events:none;opacity:0;transition:opacity .15s}
+.swipe-overlay.like{background:rgba(34,197,94,.15);border:3px solid #22c55e}
+.swipe-overlay.nope{background:rgba(229,9,20,.15);border:3px solid #e50914}
+.swipe-overlay.super{background:rgba(240,180,41,.15);border:3px solid #f0b429}
+.overlay-label{font-size:2rem;font-weight:800;letter-spacing:2px;transform:rotate(-15deg);padding:.5rem 1.5rem;border-radius:.75rem}
+.swipe-overlay.like .overlay-label{color:#22c55e;border:3px solid #22c55e;transform:rotate(-15deg)}
+.swipe-overlay.nope .overlay-label{color:#e50914;border:3px solid #e50914;transform:rotate(15deg)}
+.swipe-overlay.super .overlay-label{color:#f0b429;border:3px solid #f0b429;transform:rotate(0)}
+.mood-pill{padding:6px 14px;border-radius:999px;font-size:.75rem;font-weight:600;background:#21262d;color:#8b949e;border:1.5px solid #30363d;white-space:nowrap;cursor:pointer;transition:all .2s}
+.mood-pill.active{background:rgba(240,180,41,.15);color:#f0b429;border-color:#f0b429}
+.genre-pill{padding:3px 10px;border-radius:999px;font-size:.65rem;font-weight:600;letter-spacing:.3px}
+.platform-badge{padding:2px 8px;border-radius:6px;font-size:.6rem;font-weight:700;letter-spacing:.3px}
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:#161b22;border-top:1px solid #30363d;z-index:100;display:flex;justify-content:space-around;padding:6px 0 env(safe-area-inset-bottom,8px)}
+.nav-btn{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 12px;border:none;background:none;color:#8b949e;font-size:.6rem;font-weight:600;cursor:pointer;transition:color .2s;min-width:60px}
+.nav-btn.active{color:#f0b429}
+.nav-btn i{width:22px;height:22px}
+.action-btn{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid;cursor:pointer;transition:all .2s;background:transparent}
+.action-btn:hover{transform:scale(1.1)}
+.action-btn.skip{border-color:#e50914;color:#e50914}
+.action-btn.skip:hover{background:rgba(229,9,20,.15)}
+.action-btn.like-btn{border-color:#22c55e;color:#22c55e;width:64px;height:64px}
+.action-btn.like-btn:hover{background:rgba(34,197,94,.15)}
+.action-btn.super-btn{border-color:#f0b429;color:#f0b429}
+.action-btn.super-btn:hover{background:rgba(240,180,41,.15)}
+.wl-card{background:#161b22;border-radius:.75rem;overflow:hidden;cursor:pointer;border:1px solid #30363d;transition:transform .2s}
+.wl-card:hover{transform:translateY(-2px)}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);z-index:200;display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .3s}
+.modal-overlay.open{opacity:1;pointer-events:auto}
+.modal-content{width:100%;max-width:430px;max-height:90vh;background:#161b22;border-radius:1.25rem 1.25rem 0 0;border:1px solid #30363d;overflow-y:auto;transform:translateY(100%);transition:transform .3s}
+.modal-overlay.open .modal-content{transform:translateY(0)}
+.onboarding-screen{position:fixed;inset:0;z-index:300;background:#0d1117;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem;text-align:center;transition:opacity .4s,transform .4s}
+.onboarding-screen.hidden{opacity:0;pointer-events:none;transform:translateX(40px)}
+.onboarding-screen.active{opacity:1;transform:translateX(0)}
+.confetti-particle{position:fixed;width:8px;height:8px;border-radius:2px;z-index:250;pointer-events:none;animation:confettiFall 2s ease-in forwards}
+@keyframes confettiFall{0%{opacity:1;transform:translateY(0) rotate(0deg)}100%{opacity:0;transform:translateY(100vh) rotate(720deg)}}
+@keyframes cardEnter{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+.bar-fill{height:24px;border-radius:6px;background:linear-gradient(90deg,#f0b429,#fcd34d);transition:width .5s ease}
+.match-pct{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.6);color:#f0b429;font-size:.65rem;font-weight:700;padding:3px 8px;border-radius:999px;z-index:3;backdrop-filter:blur(4px)}
+.tabs-scroll{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;padding:0 4px}
+.tabs-scroll::-webkit-scrollbar{display:none}
+.group-badge{background:rgba(240,180,41,.15);color:#f0b429;border:1px solid #f0b429;padding:4px 12px;border-radius:999px;font-size:.7rem;font-weight:700;cursor:pointer;transition:all .2s}
+.group-badge.active{background:#f0b429;color:#0d1117}
+.stat-card{background:#21262d;border-radius:.75rem;padding:12px;text-align:center;flex:1;min-width:70px}
+.stat-num{font-size:1.25rem;font-weight:800;color:#e6edf3}
+.stat-label{font-size:.6rem;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+</style>
+</head>
+<body data-id="0">
+<app-icon data-id="1" hidden data-icon="clapperboard" data-palette="Red"></app-icon>
+
+<!-- Onboarding -->
+<div data-id="2" id="onboarding-wrap-z91k"></div>
+
+<!-- Main App -->
+<div data-id="3" id="app-wrap-x82j" style="display:none">
+  <!-- Header -->
+  <header data-id="4" id="header-m3k9" class="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3" style="background:rgba(13,17,23,.92);backdrop-filter:blur(12px);border-bottom:1px solid #30363d">
+    <div data-id="5" class="flex items-center gap-2">
+      <span data-id="6" style="color:#e50914;font-size:1.1rem">🎬</span>
+      <span data-id="7" class="text-sm font-bold tracking-wide" style="color:#e6edf3">CineSwipe</span>
+    </div>
+    <div data-id="8" class="flex items-center gap-3">
+      <button data-id="9" id="group-toggle-v4f2" class="group-badge">👥 Group</button>
+    </div>
+  </header>
+
+  <!-- Tab Content Container -->
+  <div data-id="10" id="tab-content-r7w3" class="pt-14 pb-20" style="max-width:430px;margin:0 auto">
+
+    <!-- DISCOVER TAB -->
+    <div data-id="11" id="tab-discover-q8m1" class="tab-panel px-4 py-4">
+      <div data-id="12" id="mood-bar-h6t5" class="tabs-scroll mb-4 pt-1"></div>
+      <div data-id="13" class="flex justify-center">
+        <div data-id="14" id="card-stack-b2v9" class="card-stack"></div>
+      </div>
+      <div data-id="15" id="empty-deck-u3r8" class="hidden flex flex-col items-center justify-center py-16 text-center">
+        <div data-id="16" class="text-5xl mb-4">🍿</div>
+        <p data-id="17" class="text-lg font-bold mb-1" style="color:#e6edf3">You've seen them all!</p>
+        <p data-id="18" class="text-sm" style="color:#8b949e">Reset your deck or check your watchlist</p>
+        <button data-id="19" id="reset-deck-j4w1" class="mt-4 px-6 py-2 rounded-xl text-sm font-bold" style="background:#f0b429;color:#0d1117">Reset Deck</button>
+      </div>
+      <div data-id="20" id="action-buttons-p5k3" class="flex items-center justify-center gap-5 mt-5">
+        <button data-id="21" id="btn-skip-a1z9" class="action-btn skip"><i data-id="22" data-lucide="x" class="w-6 h-6"></i></button>
+        <button data-id="23" id="btn-like-c3x7" class="action-btn like-btn"><i data-id="24" data-lucide="heart" class="w-7 h-7"></i></button>
+        <button data-id="25" id="btn-super-e5v3" class="action-btn super-btn"><i data-id="26" data-lucide="star" class="w-6 h-6"></i></button>
+      </div>
+      <div data-id="27" id="group-turn-f8h2" class="hidden text-center mt-3">
+        <span data-id="28" class="text-sm font-bold" style="color:#f0b429" id="turn-name-g9j4"></span>
+      </div>
+    </div>
+
+    <!-- WATCHLIST TAB -->
+    <div data-id="29" id="tab-watchlist-w2e6" class="tab-panel px-4 py-4 hidden">
+      <h2 data-id="30" class="text-lg font-bold mb-1" style="color:#e6edf3">Your Watchlist</h2>
+      <div data-id="31" id="wl-sort-bar-k4n8" class="tabs-scroll mb-3 mt-2"></div>
+      <div data-id="32" id="wl-platform-bar-l5o9" class="tabs-scroll mb-3"></div>
+      <div data-id="33" id="wl-grid-m6p1" class="grid grid-cols-2 gap-3"></div>
+      <div data-id="34" id="wl-empty-n7q2" class="hidden flex flex-col items-center justify-center py-16 text-center">
+        <div data-id="35" class="text-5xl mb-4">❤️</div>
+        <p data-id="36" class="text-lg font-bold mb-1" style="color:#e6edf3">Your watchlist is empty</p>
+        <p data-id="37" class="text-sm" style="color:#8b949e">Start swiping to build your watchlist ❤️</p>
+        <button data-id="38" id="go-discover-o8r3" class="mt-4 px-6 py-2 rounded-xl text-sm font-bold" style="background:#e50914;color:#fff">Start Swiping</button>
+      </div>
+    </div>
+
+    <!-- SEARCH TAB -->
+    <div data-id="39" id="tab-search-s4u8" class="tab-panel px-4 py-4 hidden">
+      <div data-id="40" class="relative mb-3">
+        <i data-id="41" data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" style="color:#8b949e"></i>
+        <input data-id="42" id="search-input-t5v9" type="text" placeholder="Search movies, cast, directors..." class="w-full pl-10 pr-10 py-3 rounded-xl text-sm" style="background:#21262d;color:#e6edf3;border:1px solid #30363d;outline:none" />
+        <button data-id="43" id="search-clear-u6w1" class="absolute right-3 top-1/2 -translate-y-1/2 hidden" style="color:#8b949e"><i data-id="44" data-lucide="x-circle" class="w-4 h-4"></i></button>
+      </div>
+      <div data-id="45" id="search-genre-bar-v7x2" class="tabs-scroll mb-2"></div>
+      <div data-id="46" id="search-plat-bar-w8y3" class="tabs-scroll mb-2"></div>
+      <div data-id="47" id="search-decade-bar-x9z4" class="tabs-scroll mb-3"></div>
+      <div data-id="48" id="search-results-y1a5" class="grid grid-cols-2 gap-3"></div>
+    </div>
+
+    <!-- PROFILE TAB -->
+    <div data-id="49" id="tab-profile-p6s2" class="tab-panel px-4 py-4 hidden">
+      <div data-id="50" id="profile-content-q7t3"></div>
+    </div>
+  </div>
+
+  <!-- Bottom Nav -->
+  <nav data-id="51" class="bottom-nav">
+    <button data-id="52" class="nav-btn active" data-tab="discover"><i data-id="53" data-lucide="clapperboard" class="w-5 h-5"></i><span data-id="54">Discover</span></button>
+    <button data-id="55" class="nav-btn" data-tab="watchlist"><i data-id="56" data-lucide="heart" class="w-5 h-5"></i><span data-id="57">Watchlist</span></button>
+    <button data-id="58" class="nav-btn" data-tab="search"><i data-id="59" data-lucide="search" class="w-5 h-5"></i><span data-id="60">Search</span></button>
+    <button data-id="61" class="nav-btn" data-tab="profile"><i data-id="62" data-lucide="user" class="w-5 h-5"></i><span data-id="63">Profile</span></button>
+  </nav>
+</div>
+
+<!-- Movie Detail Modal -->
+<div data-id="64" id="modal-overlay-d2f6" class="modal-overlay">
+  <div data-id="65" class="modal-content" id="modal-body-e3g7"></div>
+</div>
+
+<!-- Group Modal -->
+<div data-id="66" id="group-modal-h4i8" class="modal-overlay">
+  <div data-id="67" class="modal-content p-6" id="group-body-i5j9" style="max-height:70vh"></div>
+</div>
+
+<!-- Group Match Modal -->
+<div data-id="68" id="match-modal-j6k1" class="modal-overlay">
+  <div data-id="69" class="modal-content p-6" id="match-body-k7l2" style="max-height:80vh"></div>
+</div>
+
+<footer data-id="70" class="fixed bottom-14 left-0 right-0 text-center py-1 pointer-events-none" style="z-index:1">
+  <p data-id="71" class="text-xs" style="color:#484f58">Made by Copilot</p>
+</footer>
+
+<script>
+// ══════════════════════════════════════════
+// MOVIE DATABASE — 60 MOVIES
+// ══════════════════════════════════════════
+const GENRE_GRADIENTS={Action:'linear-gradient(135deg,#1a1a2e,#e94560)',Drama:'linear-gradient(135deg,#0f3460,#533483)',Comedy:'linear-gradient(135deg,#f7971e,#ffd200)',Horror:'linear-gradient(135deg,#0d0d0d,#3d0000)',SciFi:'linear-gradient(135deg,#000428,#004e92)',Romance:'linear-gradient(135deg,#f953c6,#b91d73)',Thriller:'linear-gradient(135deg,#1f1c18,#635347)',Animation:'linear-gradient(135deg,#11998e,#38ef7d)',Crime:'linear-gradient(135deg,#373b44,#4286f4)',Mystery:'linear-gradient(135deg,#1a1a2e,#9b59b6)',War:'linear-gradient(135deg,#2c3e50,#4ca1af)',Adventure:'linear-gradient(135deg,#134e5e,#71b280)',Musical:'linear-gradient(135deg,#e44d26,#f7df1e)',Fantasy:'linear-gradient(135deg,#6441a5,#2a0845)'};
+function gGrad(genres){const g=genres[0].replace(/[ -]/g,'');return GENRE_GRADIENTS[g]||GENRE_GRADIENTS.Drama}
+const PLATFORM_COLORS={Netflix:'#e50914','HBO Max':'#a17dc9','Disney+':'#0063e5',Prime:'#00a8e1',Hulu:'#1ce783',Peacock:'#049fd9','Paramount+':'#0064ff','Apple TV+':'#333',Showtime:'#b40000',Max:'#a17dc9'};
+
+const MOVIES=[
+{id:1,title:"The Dark Knight",year:2008,rating:9.0,runtime:"152 min",genres:["Action","Crime"],tagline:"Why so serious?",description:"When the menace known as the Joker wreaks havoc and chaos on the people of Gotham, Batman must accept one of the greatest psychological and physical tests of his ability to fight injustice.",cast:["Christian Bale","Heath Ledger","Aaron Eckhart","Gary Oldman"],director:"Christopher Nolan",mood:["epic","tense"],platforms:["HBO Max"],emoji:"⚫"},
+{id:2,title:"Inception",year:2010,rating:8.8,runtime:"148 min",genres:["Sci-Fi","Thriller"],tagline:"Your mind is the scene of the crime",description:"A thief who steals corporate secrets through dream-sharing technology is given the inverse task of planting an idea into the mind of a C.E.O.",cast:["Leonardo DiCaprio","Joseph Gordon-Levitt","Elliot Page","Tom Hardy"],director:"Christopher Nolan",mood:["epic","thought-provoking"],platforms:["Netflix"],emoji:"🌀"},
+{id:3,title:"Interstellar",year:2014,rating:8.6,runtime:"169 min",genres:["Sci-Fi","Drama"],tagline:"Mankind was born on Earth. It was never meant to die here.",description:"A team of explorers travel through a wormhole in space in an attempt to ensure humanity's survival as Earth becomes uninhabitable.",cast:["Matthew McConaughey","Anne Hathaway","Jessica Chastain","Michael Caine"],director:"Christopher Nolan",mood:["epic","thought-provoking","heartwarming"],platforms:["Paramount+"],emoji:"🚀"},
+{id:4,title:"The Shawshank Redemption",year:1994,rating:9.3,runtime:"142 min",genres:["Drama"],tagline:"Fear can hold you prisoner. Hope can set you free.",description:"Two imprisoned men bond over a number of years, finding solace and eventual redemption through acts of common decency.",cast:["Tim Robbins","Morgan Freeman","Bob Gunton","Clancy Brown"],director:"Frank Darabont",mood:["heartwarming","thought-provoking"],platforms:["Netflix"],emoji:"🔒"},
+{id:5,title:"Pulp Fiction",year:1994,rating:8.9,runtime:"154 min",genres:["Crime","Drama"],tagline:"Just because you are a character doesn't mean you have character.",description:"The lives of two mob hitmen, a boxer, a gangster and his wife, and a pair of diner bandits intertwine in four tales of violence and redemption.",cast:["John Travolta","Uma Thurman","Samuel L. Jackson","Bruce Willis"],director:"Quentin Tarantino",mood:["tense","funny"],platforms:["HBO Max"],emoji:"💼"},
+{id:6,title:"Forrest Gump",year:1994,rating:8.8,runtime:"142 min",genres:["Drama","Romance"],tagline:"Life is like a box of chocolates.",description:"The presidencies of Kennedy and Johnson, the Vietnam War, the Watergate scandal and other historical events unfold from the perspective of an Alabama man with an IQ of 75.",cast:["Tom Hanks","Robin Wright","Gary Sinise","Sally Field"],director:"Robert Zemeckis",mood:["heartwarming","feel-good","funny"],platforms:["Paramount+"],emoji:"🍫"},
+{id:7,title:"The Silence of the Lambs",year:1991,rating:8.6,runtime:"118 min",genres:["Thriller","Horror"],tagline:"To enter the mind of a killer she must challenge the mind of a madman.",description:"A young F.B.I. cadet must receive the help of an incarcerated and manipulative cannibal killer to help catch another serial killer.",cast:["Jodie Foster","Anthony Hopkins","Ted Levine","Scott Glenn"],director:"Jonathan Demme",mood:["scary","tense"],platforms:["Prime"],emoji:"😱"},
+{id:8,title:"Goodfellas",year:1990,rating:8.7,runtime:"146 min",genres:["Crime","Drama"],tagline:"As far back as I can remember, I always wanted to be a gangster.",description:"The story of Henry Hill and his life in the mob, covering his relationship with his wife Karen Hill and his mob partners.",cast:["Robert De Niro","Ray Liotta","Joe Pesci","Lorraine Bracco"],director:"Martin Scorsese",mood:["epic","tense"],platforms:["HBO Max"],emoji:"🔫"},
+{id:9,title:"The Matrix",year:1999,rating:8.7,runtime:"136 min",genres:["Sci-Fi","Action"],tagline:"Welcome to the Real World.",description:"When a beautiful stranger leads computer hacker Neo to a forbidding underworld, he discovers the shocking truth: the life he knows is the elaborate deception of an evil cyber-intelligence.",cast:["Keanu Reeves","Laurence Fishburne","Carrie-Anne Moss","Hugo Weaving"],director:"The Wachowskis",mood:["epic","thought-provoking"],platforms:["HBO Max"],emoji:"🕶️"},
+{id:10,title:"Parasite",year:2019,rating:8.5,runtime:"132 min",genres:["Thriller","Drama"],tagline:"Act like you own the place.",description:"Greed and class discrimination threaten the newly formed symbiotic relationship between the wealthy Park family and the destitute Kim clan.",cast:["Song Kang-ho","Lee Sun-kyun","Cho Yeo-jeong","Choi Woo-shik"],director:"Bong Joon-ho",mood:["tense","thought-provoking"],platforms:["Hulu"],emoji:"🏠"},
+{id:11,title:"Get Out",year:2017,rating:7.7,runtime:"104 min",genres:["Horror","Thriller"],tagline:"Just because you're invited doesn't mean you're welcome.",description:"A young African-American visits his white girlfriend's parents for the weekend, where his simmering uneasiness about their reception of him eventually reaches a boiling point.",cast:["Daniel Kaluuya","Allison Williams","Bradley Whitford","Catherine Keener"],director:"Jordan Peele",mood:["scary","tense","thought-provoking"],platforms:["Peacock"],emoji:"😰"},
+{id:12,title:"La La Land",year:2016,rating:8.0,runtime:"128 min",genres:["Musical","Romance"],tagline:"Here's to the fools who dream.",description:"While navigating their careers in Los Angeles, a pianist and an actress fall in love while attempting to reconcile their aspirations for the future.",cast:["Ryan Gosling","Emma Stone","John Legend","Rosemarie DeWitt"],director:"Damien Chazelle",mood:["romantic","heartwarming","feel-good"],platforms:["Netflix"],emoji:"🎭"},
+{id:13,title:"Everything Everywhere All at Once",year:2022,rating:7.8,runtime:"139 min",genres:["Sci-Fi","Comedy"],tagline:"The universe is so much bigger than you realize.",description:"An aging Chinese immigrant is swept up in an insane adventure where she alone can save the world by exploring other universes connecting with the lives she could have led.",cast:["Michelle Yeoh","Stephanie Hsu","Ke Huy Quan","Jamie Lee Curtis"],director:"Daniel Kwan",mood:["funny","heartwarming","epic"],platforms:["Showtime"],emoji:"🥢"},
+{id:14,title:"Top Gun: Maverick",year:2022,rating:8.2,runtime:"130 min",genres:["Action","Drama"],tagline:"Feel the need... the need for speed.",description:"After more than thirty years of service, Pete Mitchell is where he belongs, pushing the envelope as a courageous test pilot and dodging the advancement in rank that would ground him.",cast:["Tom Cruise","Miles Teller","Jennifer Connelly","Jon Hamm"],director:"Joseph Kosinski",mood:["epic","feel-good"],platforms:["Paramount+"],emoji:"✈️"},
+{id:15,title:"The Avengers",year:2012,rating:8.0,runtime:"143 min",genres:["Action","Sci-Fi"],tagline:"Some assembly required.",description:"Earth's mightiest heroes must come together and learn to fight as a team if they are going to stop the mischievous Loki and his alien army.",cast:["Robert Downey Jr.","Chris Evans","Scarlett Johansson","Mark Ruffalo"],director:"Joss Whedon",mood:["epic","funny","feel-good"],platforms:["Disney+"],emoji:"🦸"},
+{id:16,title:"Knives Out",year:2019,rating:7.9,runtime:"130 min",genres:["Mystery","Comedy"],tagline:"Everyone is a suspect.",description:"A detective investigates the death of a patriarch of an eccentric, combative family.",cast:["Daniel Craig","Chris Evans","Ana de Armas","Jamie Lee Curtis"],director:"Rian Johnson",mood:["funny","tense"],platforms:["Netflix"],emoji:"🔪"},
+{id:17,title:"Hereditary",year:2018,rating:7.3,runtime:"127 min",genres:["Horror","Drama"],tagline:"Every family tree hides a secret.",description:"A grieving family is haunted by tragic and disturbing occurrences after the death of their secretive grandmother.",cast:["Toni Collette","Milly Shapiro","Gabriel Byrne","Alex Wolff"],director:"Ari Aster",mood:["scary","tense"],platforms:["Prime"],emoji:"👁️"},
+{id:18,title:"Whiplash",year:2014,rating:8.5,runtime:"107 min",genres:["Drama"],tagline:"The road to greatness can destroy a man.",description:"A promising young drummer enrolls at a cut-throat music conservatory where his dreams of greatness are mentored by an instructor who will stop at nothing.",cast:["Miles Teller","J.K. Simmons","Melissa Benoist","Paul Reiser"],director:"Damien Chazelle",mood:["tense","epic","thought-provoking"],platforms:["Netflix"],emoji:"🥁"},
+{id:19,title:"The Grand Budapest Hotel",year:2014,rating:8.1,runtime:"99 min",genres:["Comedy","Drama"],tagline:"A perfect holiday without the hassle.",description:"A writer encounters the owner of an aging high-class hotel, who tells him of his early years serving as a lobby boy in the hotel's glorious years under an exceptional concierge.",cast:["Ralph Fiennes","Tony Revolori","Saoirse Ronan","F. Murray Abraham"],director:"Wes Anderson",mood:["funny","heartwarming"],platforms:["Disney+"],emoji:"🎩"},
+{id:20,title:"Mad Max: Fury Road",year:2015,rating:8.1,runtime:"120 min",genres:["Action","Adventure"],tagline:"What a lovely day!",description:"In a post-apocalyptic wasteland, a woman rebels against a tyrannical ruler in search for her homeland with the aid of a group of female prisoners and a drifter named Max.",cast:["Tom Hardy","Charlize Theron","Nicholas Hoult","Hugh Keays-Byrne"],director:"George Miller",mood:["epic","tense"],platforms:["HBO Max"],emoji:"🔥"},
+{id:21,title:"Moonlight",year:2016,rating:7.4,runtime:"111 min",genres:["Drama"],tagline:"This is the story of a lifetime.",description:"A young African-American man grapples with his identity and sexuality while experiencing the everyday struggles of childhood, adolescence, and burgeoning adulthood.",cast:["Trevante Rhodes","Ashton Sanders","Janelle Monáe","Mahershala Ali"],director:"Barry Jenkins",mood:["thought-provoking","heartwarming"],platforms:["Netflix"],emoji:"🌙"},
+{id:22,title:"A Quiet Place",year:2018,rating:7.5,runtime:"90 min",genres:["Horror","Thriller"],tagline:"If they hear you, they hunt you.",description:"In a post-apocalyptic world, a family is forced to live in silence while hiding from monsters with ultra-sensitive hearing.",cast:["Emily Blunt","John Krasinski","Millicent Simmonds","Noah Jupe"],director:"John Krasinski",mood:["scary","tense"],platforms:["Paramount+"],emoji:"🤫"},
+{id:23,title:"Black Panther",year:2018,rating:7.3,runtime:"134 min",genres:["Action","Sci-Fi"],tagline:"Long live the king.",description:"T'Challa, heir to the hidden but advanced kingdom of Wakanda, must step forward to lead his people into a new future and confront a challenger from his country's past.",cast:["Chadwick Boseman","Michael B. Jordan","Lupita Nyong'o","Danai Gurira"],director:"Ryan Coogler",mood:["epic","feel-good"],platforms:["Disney+"],emoji:"🐾"},
+{id:24,title:"The Wolf of Wall Street",year:2013,rating:8.2,runtime:"180 min",genres:["Crime","Comedy"],tagline:"EARN. SPEND. PARTY.",description:"Based on the true story of Jordan Belfort, from his rise to a wealthy stock-broker living the high life to his fall involving crime, corruption and the federal government.",cast:["Leonardo DiCaprio","Jonah Hill","Margot Robbie","Matthew McConaughey"],director:"Martin Scorsese",mood:["funny","epic"],platforms:["Paramount+"],emoji:"💰"},
+{id:25,title:"Her",year:2013,rating:8.0,runtime:"126 min",genres:["Romance","Sci-Fi"],tagline:"A love story like no other.",description:"In a near future, a lonely writer develops an unlikely relationship with an operating system designed to meet his every need.",cast:["Joaquin Phoenix","Scarlett Johansson","Amy Adams","Rooney Mara"],director:"Spike Jonze",mood:["romantic","thought-provoking","heartwarming"],platforms:["HBO Max"],emoji:"❤️"},
+{id:26,title:"Arrival",year:2016,rating:7.9,runtime:"116 min",genres:["Sci-Fi","Drama"],tagline:"Why are they here?",description:"A linguist works with the military to communicate with alien lifeforms after twelve mysterious spacecrafts appear around the world.",cast:["Amy Adams","Jeremy Renner","Forest Whitaker","Michael Stuhlbarg"],director:"Denis Villeneuve",mood:["thought-provoking","epic"],platforms:["Paramount+"],emoji:"👽"},
+{id:27,title:"Joker",year:2019,rating:8.4,runtime:"122 min",genres:["Crime","Drama"],tagline:"Put on a happy face.",description:"In Gotham City, mentally troubled comedian Arthur Fleck is disregarded and mistreated by society. He then embarks on a downward spiral that leads to the creation of an iconic villain.",cast:["Joaquin Phoenix","Robert De Niro","Zazie Beetz","Frances Conroy"],director:"Todd Phillips",mood:["tense","thought-provoking"],platforms:["HBO Max"],emoji:"🃏"},
+{id:28,title:"1917",year:2019,rating:8.3,runtime:"119 min",genres:["War","Drama"],tagline:"Time is the enemy.",description:"Two young British soldiers during World War I are given an impossible mission: deliver a message deep in enemy territory that will stop 1,600 men from walking into a deadly trap.",cast:["George MacKay","Dean-Charles Chapman","Mark Strong","Colin Firth"],director:"Sam Mendes",mood:["epic","tense"],platforms:["Prime"],emoji:"⚔️"},
+{id:29,title:"Once Upon a Time in Hollywood",year:2019,rating:7.6,runtime:"161 min",genres:["Drama","Comedy"],tagline:"The 9th film from Quentin Tarantino.",description:"A faded television actor and his stunt double strive to achieve fame and success in the final years of Hollywood's Golden Age in 1969 Los Angeles.",cast:["Leonardo DiCaprio","Brad Pitt","Margot Robbie","Al Pacino"],director:"Quentin Tarantino",mood:["funny","feel-good"],platforms:["Netflix"],emoji:"🎬"},
+{id:30,title:"Soul",year:2020,rating:8.0,runtime:"100 min",genres:["Animation","Comedy"],tagline:"Is all of this living really worth dying for?",description:"A musician who has lost his passion for music is transported out of his body and must find his way back with the help of an infant soul learning about herself.",cast:["Jamie Foxx","Tina Fey","Graham Norton","Rachel House"],director:"Pete Docter",mood:["heartwarming","thought-provoking","funny"],platforms:["Disney+"],emoji:"🎵"},
+{id:31,title:"Nomadland",year:2020,rating:7.3,runtime:"108 min",genres:["Drama"],tagline:"Discover what it means to call something home.",description:"A woman in her sixties, after losing everything in the Great Recession, embarks on a journey through the American West, living as a van-dwelling modern-day nomad.",cast:["Frances McDormand","David Strathairn","Linda May","Swankie"],director:"Chloé Zhao",mood:["thought-provoking","heartwarming"],platforms:["Hulu"],emoji:"🚐"},
+{id:32,title:"Dune",year:2021,rating:8.0,runtime:"155 min",genres:["Sci-Fi","Adventure"],tagline:"It begins.",description:"A noble family becomes embroiled in a war for control over the galaxy's most valuable asset while its heir becomes troubled by visions of a dark future.",cast:["Timothée Chalamet","Rebecca Ferguson","Oscar Isaac","Zendaya"],director:"Denis Villeneuve",mood:["epic","thought-provoking"],platforms:["HBO Max"],emoji:"🏜️"},
+{id:33,title:"No Country for Old Men",year:2007,rating:8.2,runtime:"122 min",genres:["Thriller","Crime"],tagline:"There are no clean getaways.",description:"Violence and mayhem ensue after a hunter stumbles upon a drug deal gone wrong and more than two million dollars in cash near the Rio Grande.",cast:["Javier Bardem","Josh Brolin","Tommy Lee Jones","Woody Harrelson"],director:"Coen Brothers",mood:["tense","thought-provoking"],platforms:["Prime"],emoji:"🤠"},
+{id:34,title:"There Will Be Blood",year:2007,rating:8.2,runtime:"158 min",genres:["Drama"],tagline:"I drink your milkshake!",description:"A story of family, religion, hatred, oil and madness, focusing on a turn-of-the-century prospector in the early days of the business.",cast:["Daniel Day-Lewis","Paul Dano","Kevin J. O'Connor","Ciarán Hinds"],director:"Paul Thomas Anderson",mood:["epic","tense","thought-provoking"],platforms:["Prime"],emoji:"🛢️"},
+{id:35,title:"The Social Network",year:2010,rating:7.7,runtime:"120 min",genres:["Drama"],tagline:"You don't get to 500 million friends without making a few enemies.",description:"As Harvard student Mark Zuckerberg creates the social networking site that would become known as Facebook, he is sued by the twins who claimed he stole their idea.",cast:["Jesse Eisenberg","Andrew Garfield","Justin Timberlake","Armie Hammer"],director:"David Fincher",mood:["tense","thought-provoking"],platforms:["Netflix"],emoji:"💻"},
+{id:36,title:"Gravity",year:2013,rating:7.7,runtime:"91 min",genres:["Sci-Fi","Thriller"],tagline:"Don't let go.",description:"Two astronauts work together to survive after an accident leaves them stranded in space.",cast:["Sandra Bullock","George Clooney","Ed Harris","Orto Ignatiussen"],director:"Alfonso Cuarón",mood:["tense","epic"],platforms:["HBO Max"],emoji:"🌌"},
+{id:37,title:"Birdman",year:2014,rating:7.7,runtime:"119 min",genres:["Drama","Comedy"],tagline:"Or (The Unexpected Virtue of Ignorance).",description:"A washed-up superhero actor attempts to revive his fading career by writing, directing, and starring in a Broadway production.",cast:["Michael Keaton","Zach Galifianakis","Edward Norton","Emma Stone"],director:"Alejandro G. Iñárritu",mood:["funny","thought-provoking"],platforms:["HBO Max"],emoji:"🐦"},
+{id:38,title:"Spotlight",year:2015,rating:8.1,runtime:"129 min",genres:["Drama","Crime"],tagline:"Break the story. Break the silence.",description:"The true story of how the Boston Globe uncovered the massive scandal of child molestation and cover-up within the local Catholic Archdiocese.",cast:["Michael Keaton","Mark Ruffalo","Rachel McAdams","Liev Schreiber"],director:"Tom McCarthy",mood:["thought-provoking","tense"],platforms:["Hulu"],emoji:"📰"},
+{id:39,title:"The Revenant",year:2015,rating:8.0,runtime:"156 min",genres:["Adventure","Drama"],tagline:"Blood lost. Life found.",description:"A frontiersman on a fur trading expedition in the 1820s fights for survival after being mauled by a bear and left for dead by members of his own hunting team.",cast:["Leonardo DiCaprio","Tom Hardy","Domhnall Gleeson","Will Poulter"],director:"Alejandro G. Iñárritu",mood:["epic","tense"],platforms:["Hulu"],emoji:"🐻"},
+{id:40,title:"Dunkirk",year:2017,rating:7.9,runtime:"106 min",genres:["War","Action"],tagline:"Survival is victory.",description:"Allied soldiers from Belgium, the British Empire, and France are surrounded by the German Army and evacuated during a fierce battle in World War II.",cast:["Fionn Whitehead","Tom Hardy","Mark Rylance","Kenneth Branagh"],director:"Christopher Nolan",mood:["epic","tense"],platforms:["HBO Max"],emoji:"⚓"},
+{id:41,title:"Coco",year:2017,rating:8.4,runtime:"105 min",genres:["Animation","Drama"],tagline:"The celebration of a lifetime.",description:"Aspiring musician Miguel, confronted with his family's ancestral ban on music, enters the Land of the Dead to find his great-great-grandfather, a legendary singer.",cast:["Anthony Gonzalez","Gael García Bernal","Benjamin Bratt","Alanna Ubach"],director:"Lee Unkrich",mood:["heartwarming","feel-good"],platforms:["Disney+"],emoji:"💀"},
+{id:42,title:"BlacKkKlansman",year:2018,rating:7.5,runtime:"135 min",genres:["Drama","Crime"],tagline:"Infiltrate hate.",description:"An African American police officer from Colorado Springs successfully manages to infiltrate the local Ku Klux Klan branch with the help of a Jewish surrogate.",cast:["John David Washington","Adam Driver","Topher Grace","Laura Harrier"],director:"Spike Lee",mood:["tense","thought-provoking","funny"],platforms:["HBO Max"],emoji:"✊"},
+{id:43,title:"Marriage Story",year:2019,rating:7.9,runtime:"137 min",genres:["Drama","Romance"],tagline:"A love story about divorce.",description:"Noah Baumbach's incisive and compassionate look at a marriage breaking up and a family staying together.",cast:["Adam Driver","Scarlett Johansson","Laura Dern","Alan Alda"],director:"Noah Baumbach",mood:["heartwarming","thought-provoking"],platforms:["Netflix"],emoji:"💔"},
+{id:44,title:"Midsommar",year:2019,rating:7.1,runtime:"148 min",genres:["Horror","Drama"],tagline:"Let the festivities begin.",description:"A couple travels to Northern Europe to visit a rural hometown's fabled Swedish mid-summer festival. What begins as an idyllic retreat quickly devolves into an increasingly violent competition.",cast:["Florence Pugh","Jack Reynor","Will Poulter","William Jackson Harper"],director:"Ari Aster",mood:["scary","tense"],platforms:["Prime"],emoji:"🌸"},
+{id:45,title:"The Irishman",year:2019,rating:7.8,runtime:"209 min",genres:["Crime","Drama"],tagline:"His story changed history.",description:"An aging hitman recalls his time with the mob and the inter-related events with his friend, Jimmy Hoffa, through the 1950-70s.",cast:["Robert De Niro","Al Pacino","Joe Pesci","Harvey Keitel"],director:"Martin Scorsese",mood:["epic","tense","thought-provoking"],platforms:["Netflix"],emoji:"🍝"},
+{id:46,title:"Little Women",year:2019,rating:7.8,runtime:"135 min",genres:["Drama","Romance"],tagline:"Own your story.",description:"Jo March reflects back and forth on her life, telling the beloved story of the March sisters as they navigate love, loss, and the pursuit of their dreams.",cast:["Saoirse Ronan","Florence Pugh","Emma Watson","Timothée Chalamet"],director:"Greta Gerwig",mood:["heartwarming","romantic"],platforms:["Netflix"],emoji:"📚"},
+{id:47,title:"Palm Springs",year:2020,rating:7.4,runtime:"90 min",genres:["Comedy","Romance"],tagline:"Live like there's no tomorrow.",description:"When carefree Nyles and reluctant maid of honor Sarah have a chance encounter at a Palm Springs wedding, things get complicated as they are unable to escape the venue or each other.",cast:["Andy Samberg","Cristin Milioti","J.K. Simmons","Peter Gallagher"],director:"Max Barbakow",mood:["funny","romantic","feel-good"],platforms:["Hulu"],emoji:"🌵"},
+{id:48,title:"Tenet",year:2020,rating:7.4,runtime:"150 min",genres:["Action","Sci-Fi"],tagline:"Time runs out.",description:"Armed with only one word, Tenet, and fighting for the survival of the entire world, a Protagonist journeys through a twilight world of international espionage on a mission that will unfold in something beyond real time.",cast:["John David Washington","Robert Pattinson","Elizabeth Debicki","Kenneth Branagh"],director:"Christopher Nolan",mood:["epic","thought-provoking","tense"],platforms:["HBO Max"],emoji:"🔄"},
+{id:49,title:"The Father",year:2020,rating:8.2,runtime:"97 min",genres:["Drama"],tagline:"Nothing is as it seems.",description:"A man refuses all assistance from his daughter as he ages. As he tries to make sense of his changing circumstances, he begins to doubt his loved ones.",cast:["Anthony Hopkins","Olivia Colman","Mark Gatiss","Imogen Poots"],director:"Florian Zeller",mood:["thought-provoking","heartwarming"],platforms:["Prime"],emoji:"👴"},
+{id:50,title:"Promising Young Woman",year:2020,rating:7.5,runtime:"113 min",genres:["Thriller","Drama"],tagline:"Revenge never looked so promising.",description:"A young woman, traumatized by a tragic event in her past, seeks out vengeance against those who crossed her path.",cast:["Carey Mulligan","Bo Burnham","Alison Brie","Clancy Brown"],director:"Emerald Fennell",mood:["tense","thought-provoking"],platforms:["Peacock"],emoji:"💄"},
+{id:51,title:"Spencer",year:2021,rating:6.9,runtime:"117 min",genres:["Drama"],tagline:"A fable from a true tragedy.",description:"During her Christmas holidays with the royal family at the Sandringham estate, Diana Spencer decides to end her decade-long marriage to Prince Charles.",cast:["Kristen Stewart","Timothy Spall","Jack Farthing","Sean Harris"],director:"Pablo Larraín",mood:["thought-provoking","tense"],platforms:["Hulu"],emoji:"👑"},
+{id:52,title:"The Power of the Dog",year:2021,rating:6.9,runtime:"126 min",genres:["Drama"],tagline:"All you see is the horizon.",description:"Charismatic rancher Phil Burbank inspires fear and awe in those around him. When his brother brings home a new wife and her son, Phil torments them until he finds himself exposed to the possibility of love.",cast:["Benedict Cumberbatch","Kirsten Dunst","Jesse Plemons","Kodi Smit-McPhee"],director:"Jane Campion",mood:["thought-provoking","tense"],platforms:["Netflix"],emoji:"🐕"},
+{id:53,title:"CODA",year:2021,rating:7.6,runtime:"111 min",genres:["Drama","Comedy"],tagline:"Listen with your heart.",description:"As a CODA (Child of Deaf Adults), Ruby is the only hearing person in her deaf family. She discovers a gift for singing and faces a choice between her obligations to family and pursuing her dream.",cast:["Emilia Jones","Troy Kotsur","Marlee Matlin","Daniel Durant"],director:"Sian Heder",mood:["heartwarming","feel-good"],platforms:["Apple TV+"],emoji:"🤟"},
+{id:54,title:"Drive My Car",year:2021,rating:7.6,runtime:"179 min",genres:["Drama"],tagline:"Keep on living.",description:"A renowned stage actor and director learns to face the haunting truths about his late wife through an unexpected bond with a reserved chauffeur assigned to him.",cast:["Hidetoshi Nishijima","Tōko Miura","Masaki Okada","Reika Kirishima"],director:"Ryusuke Hamaguchi",mood:["thought-provoking","heartwarming"],platforms:["HBO Max"],emoji:"🚗"},
+{id:55,title:"The Northman",year:2022,rating:7.1,runtime:"137 min",genres:["Action","Drama"],tagline:"Conquer your fate.",description:"From visionary director Robert Eggers comes an epic revenge thriller that explores how far a Viking prince will go to seek justice for his murdered father.",cast:["Alexander Skarsgård","Nicole Kidman","Claes Bang","Anya Taylor-Joy"],director:"Robert Eggers",mood:["epic","tense"],platforms:["Peacock"],emoji:"⚔️"},
+{id:56,title:"Nope",year:2022,rating:6.8,runtime:"130 min",genres:["Horror","Sci-Fi"],tagline:"What's a bad miracle?",description:"The residents of a lonely gulch in inland California bear witness to an uncanny and chilling discovery.",cast:["Daniel Kaluuya","Keke Palmer","Steven Yeun","Brandon Perea"],director:"Jordan Peele",mood:["scary","thought-provoking"],platforms:["Peacock"],emoji:"👀"},
+{id:57,title:"Babylon",year:2022,rating:7.2,runtime:"189 min",genres:["Drama","Comedy"],tagline:"A tale of outsized ambition.",description:"A tale of outsized ambition and outrageous excess, tracing the rise and fall of multiple characters during an era of unbridled decadence in early Hollywood.",cast:["Brad Pitt","Margot Robbie","Diego Calva","Jean Smart"],director:"Damien Chazelle",mood:["epic","funny"],platforms:["Paramount+"],emoji:"🎪"},
+{id:58,title:"Oppenheimer",year:2023,rating:8.9,runtime:"180 min",genres:["Drama"],tagline:"The world forever changes.",description:"The story of American scientist J. Robert Oppenheimer and his role in the development of the atomic bomb during World War II.",cast:["Cillian Murphy","Emily Blunt","Matt Damon","Robert Downey Jr."],director:"Christopher Nolan",mood:["epic","thought-provoking","tense"],platforms:["Prime"],emoji:"☢️"},
+{id:59,title:"Barbie",year:2023,rating:6.9,runtime:"114 min",genres:["Comedy","Fantasy"],tagline:"She's everything. He's just Ken.",description:"Barbie and Ken are having the time of their lives in the colorful and seemingly perfect world of Barbie Land. However, when they get a chance to go to the real world, they discover the joys and perils of living among humans.",cast:["Margot Robbie","Ryan Gosling","America Ferrera","Will Ferrell"],director:"Greta Gerwig",mood:["funny","feel-good"],platforms:["Max"],emoji:"💗"},
+{id:60,title:"Poor Things",year:2023,rating:8.0,runtime:"141 min",genres:["Fantasy","Drama"],tagline:"She found herself.",description:"The incredible tale about the fantastical evolution of Bella Baxter, a young woman brought back to life by the brilliant and unorthodox scientist Dr. Godwin Baxter.",cast:["Emma Stone","Mark Ruffalo","Willem Dafoe","Ramy Youssef"],director:"Yorgos Lanthimos",mood:["funny","thought-provoking"],platforms:["Hulu"],emoji:"🦋"}
+];
+MOVIES.forEach(m=>{m.posterGradient=gGrad(m.genres)});
+
+// ══════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════
+const MOODS=[{id:'all',label:'All',emoji:'🎬'},{id:'funny',label:'Funny',emoji:'😂'},{id:'scary',label:'Scary',emoji:'😱'},{id:'feel-good',label:'Feel-Good',emoji:'😭'},{id:'epic',label:'Epic',emoji:'🔥'},{id:'thought-provoking',label:'Deep',emoji:'🤔'},{id:'romantic',label:'Romantic',emoji:'💕'},{id:'tense',label:'Tense',emoji:'😬'},{id:'heartwarming',label:'Heartwarming',emoji:'🥺'}];
+const ALL_GENRES=['Action','Drama','Comedy','Horror','Sci-Fi','Romance','Thriller','Animation','Crime','Mystery','War','Adventure','Musical','Fantasy'];
+const ALL_PLATFORMS=['Netflix','HBO Max','Disney+','Prime','Hulu','Peacock','Paramount+','Apple TV+','Showtime','Max'];
+
+let state={
+  onboarded:localStorage.getItem('cs_onboarded')==='1',
+  watchlist:JSON.parse(localStorage.getItem('cs_watchlist')||'[]'),
+  superlikes:JSON.parse(localStorage.getItem('cs_superlikes')||'[]'),
+  taste:JSON.parse(localStorage.getItem('cs_taste')||'null')||{genreScores:{},moodScores:{},decadeScores:{},platformScores:{},directorScores:{},ratingMin:10},
+  swipes:JSON.parse(localStorage.getItem('cs_swipes')||'[]'),
+  activeMoods:JSON.parse(localStorage.getItem('cs_mood')||'[]'),
+  deck:[],
+  currentTab:'discover',
+  groupMode:false,
+  groupNames:[],
+  groupCurrentPerson:0,
+  groupSwipes:{},
+  groupDeck:[],
+  wlSort:'added',
+  wlPlatform:'All',
+  searchGenre:'All',
+  searchPlatform:'All',
+  searchDecade:'All',
+  searchQuery:''
+};
+
+function save(){
+  localStorage.setItem('cs_watchlist',JSON.stringify(state.watchlist));
+  localStorage.setItem('cs_superlikes',JSON.stringify(state.superlikes));
+  localStorage.setItem('cs_taste',JSON.stringify(state.taste));
+  localStorage.setItem('cs_swipes',JSON.stringify(state.swipes));
+  localStorage.setItem('cs_mood',JSON.stringify(state.activeMoods));
+}
+function getDecade(y){if(y<2000)return'90s';if(y<2010)return'00s';if(y<2020)return'10s';return'20s'}
+function getSwipedIds(){return state.swipes.map(s=>s.id)}
+function buildDeck(){
+  const swiped=getSwipedIds();
+  let pool=MOVIES.filter(m=>!swiped.includes(m.id));
+  if(state.activeMoods.length>0){
+    pool=pool.filter(m=>m.mood.some(mo=>state.activeMoods.includes(mo)));
+  }
+  if(state.swipes.length>=5){
+    pool.sort((a,b)=>tasteScore(b)-tasteScore(a));
+  }else{
+    for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]]}
+  }
+  state.deck=pool;
+}
+function tasteScore(movie){
+  let s=0;const t=state.taste;
+  movie.genres.forEach(g=>{s+=(t.genreScores[g]||0)*2});
+  movie.mood.forEach(m=>{s+=(t.moodScores[m]||0)*1.5});
+  s+=(t.decadeScores[getDecade(movie.year)]||0);
+  movie.platforms.forEach(p=>{s+=(t.platformScores[p]||0)*0.5});
+  s+=(t.directorScores[movie.director]||0)*1.5;
+  return s;
+}
+function tastePercent(movie){
+  if(state.swipes.length<5)return null;
+  const s=tasteScore(movie);const maxPossible=Math.max(...MOVIES.map(m=>tasteScore(m)),1);
+  return Math.min(99,Math.max(40,Math.round((s/maxPossible)*100)));
+}
+function updateTaste(movie,dir){
+  const t=state.taste;const mult=dir==='super'?4:dir==='like'?2:-1;
+  movie.genres.forEach(g=>{t.genreScores[g]=(t.genreScores[g]||0)+mult});
+  movie.mood.forEach(m=>{t.moodScores[m]=(t.moodScores[m]||0)+mult});
+  const d=getDecade(movie.year);t.decadeScores[d]=(t.decadeScores[d]||0)+mult;
+  movie.platforms.forEach(p=>{t.platformScores[p]=(t.platformScores[p]||0)+mult});
+  t.directorScores[movie.director]=(t.directorScores[movie.director]||0)+mult;
+  if(dir!=='skip'&&movie.rating<t.ratingMin)t.ratingMin=movie.rating;
+  if(state.swipes.length%5===0)buildDeck();
+}
+
+// ══════════════════════════════════════════
+// ONBOARDING
+// ══════════════════════════════════════════
+function showOnboarding(){
+  if(state.onboarded){document.getElementById('app-wrap-x82j').style.display='';return}
+  const wrap=document.getElementById('onboarding-wrap-z91k');
+  const screens=[
+    {emoji:'🎬',title:'CineSwipe',sub:'Discover movies you\'ll actually watch',extra:'<div class="mt-8 relative w-48 h-32 mx-auto"><div class="absolute inset-0 rounded-xl" style="background:linear-gradient(135deg,#1a1a2e,#e94560);animation:pulse 2s infinite"></div><div class="absolute inset-0 flex items-center justify-center text-3xl">🎬</div></div>'},
+    {emoji:'❤️',title:'Swipe to Discover',sub:'Swipe right to save, left to skip, up to Super Like',extra:'<div class="flex gap-6 mt-6 justify-center"><div class="text-center"><div class="text-2xl">👈</div><div class="text-xs mt-1" style="color:#e50914">Skip</div></div><div class="text-center"><div class="text-2xl">👆</div><div class="text-xs mt-1" style="color:#f0b429">Super Like</div></div><div class="text-center"><div class="text-2xl">👉</div><div class="text-xs mt-1" style="color:#22c55e">Like</div></div></div>'},
+    {emoji:'🍿',title:'Your Watchlist Awaits',sub:'Your watchlist builds itself. Your taste engine learns with every swipe.',extra:'<button id="get-started-btn-a1b2" class="mt-8 px-8 py-3 rounded-xl text-base font-bold" style="background:#f0b429;color:#0d1117">Get Started</button>'}
+  ];
+  let cur=0;
+  function render(){
+    wrap.innerHTML=screens.map((s,i)=>`
+      <div class="onboarding-screen ${i===cur?'active':'hidden'}" data-screen="${i}">
+        <button class="absolute top-4 right-4 text-xs font-bold" style="color:#8b949e;background:none;border:none;cursor:pointer;padding:8px" data-skip-ob="1">Skip</button>
+        <div class="text-6xl mb-6">${s.emoji}</div>
+        <h1 class="text-2xl font-bold mb-2">${s.title}</h1>
+        <p class="text-sm mb-2" style="color:#8b949e;max-width:280px">${s.sub}</p>
+        ${s.extra}
+        <div class="flex gap-2 mt-8">${screens.map((_,j)=>`<div style="width:8px;height:8px;border-radius:50%;background:${j===cur?'#f0b429':'#30363d'}"></div>`).join('')}</div>
+        ${i<screens.length-1?'<button class="mt-4 text-sm font-bold" style="color:#f0b429;background:none;border:none;cursor:pointer;padding:8px" data-next-ob="1">Next →</button>':''}
+      </div>
+    `).join('');
+    wrap.querySelectorAll('[data-skip-ob]').forEach(b=>b.addEventListener('click',finish));
+    wrap.querySelectorAll('[data-next-ob]').forEach(b=>b.addEventListener('click',()=>{cur++;render()}));
+    const gs=document.getElementById('get-started-btn-a1b2');
+    if(gs)gs.addEventListener('click',finish);
+  }
+  function finish(){
+    state.onboarded=true;localStorage.setItem('cs_onboarded','1');
+    wrap.style.opacity='0';wrap.style.transition='opacity .4s';
+    setTimeout(()=>{wrap.style.display='none';document.getElementById('app-wrap-x82j').style.display='';initApp()},400);
+  }
+  render();
+}
+
+// ══════════════════════════════════════════
+// CARD RENDERING & SWIPING
+// ══════════════════════════════════════════
+let cardEls=[];let isDragging=false;let startX=0,startY=0,currentX=0,currentY=0;
+let cardStartTime=0;
+
+function renderCards(){
+  const stack=document.getElementById('card-stack-b2v9');
+  const empty=document.getElementById('empty-deck-u3r8');
+  const actions=document.getElementById('action-buttons-p5k3');
+  stack.innerHTML='';cardEls=[];
+  if(state.deck.length===0){empty.classList.remove('hidden');actions.style.opacity='0.3';actions.style.pointerEvents='none';return}
+  empty.classList.add('hidden');actions.style.opacity='1';actions.style.pointerEvents='auto';
+  const show=state.deck.slice(0,3);
+  show.forEach((movie,i)=>{
+    const card=document.createElement('div');
+    card.className='swipe-card'+(i>0?' behind':'');
+    const sc=i===0?1:i===1?.96:.92;
+    const ty=i===0?0:i===1?8:16;
+    card.style.transform=`scale(${sc}) translateY(${ty}px)`;
+    card.style.zIndex=10-i;
+    if(i>0)card.style.opacity=i===1?'0.7':'0.4';
+    const matchPct=tastePercent(movie);
+    card.innerHTML=`
+      ${matchPct?`<div class="match-pct">🎯 ${matchPct}% Match</div>`:''}
+      <div class="card-gradient" style="background:${movie.posterGradient}"></div>
+      <div class="card-emoji">${movie.emoji}</div>
+      <div class="card-content">
+        <h3 class="text-xl font-bold mb-1" style="text-shadow:0 2px 8px rgba(0,0,0,.7)">${movie.title}</h3>
+        <div class="flex items-center gap-2 text-xs mb-2" style="color:#ccc">
+          <span>${movie.year}</span><span>·</span><span>⭐ ${movie.rating}</span><span>·</span><span>${movie.runtime}</span>
+        </div>
+        <div class="flex flex-wrap gap-1 mb-2">
+          ${movie.genres.map(g=>`<span class="genre-pill" style="background:rgba(255,255,255,.15);color:#fff">${g}</span>`).join('')}
+        </div>
+        <p class="text-xs italic mb-2" style="color:#bbb">"${movie.tagline}"</p>
+        <p class="text-xs mb-2" style="color:#999">${movie.cast.slice(0,3).join(' · ')}</p>
+        <div class="flex gap-1 justify-end">
+          ${movie.platforms.map(p=>`<span class="platform-badge" style="background:${PLATFORM_COLORS[p]||'#333'};color:#fff">${p}</span>`).join('')}
+        </div>
+      </div>
+      <div class="swipe-overlay like"><span class="overlay-label">LIKE</span></div>
+      <div class="swipe-overlay nope"><span class="overlay-label">NOPE</span></div>
+      <div class="swipe-overlay super"><span class="overlay-label">SUPER</span></div>
+    `;
+    stack.appendChild(card);
+    cardEls.push({el:card,movie});
+  });
+  attachSwipe();
+}
+
+function attachSwipe(){
+  if(cardEls.length===0)return;
+  const card=cardEls[0].el;
+  card.addEventListener('pointerdown',onPointerDown);
+  card.addEventListener('pointermove',onPointerMove);
+  card.addEventListener('pointerup',onPointerUp);
+  card.addEventListener('pointercancel',onPointerUp);
+}
+function onPointerDown(e){
+  isDragging=true;startX=e.clientX;startY=e.clientY;currentX=0;currentY=0;cardStartTime=Date.now();
+  cardEls[0].el.setPointerCapture(e.pointerId);
+  cardEls[0].el.style.transition='none';
+}
+function onPointerMove(e){
+  if(!isDragging)return;
+  currentX=e.clientX-startX;currentY=e.clientY-startY;
+  const rot=currentX*0.08;
+  const clampedRot=Math.max(-30,Math.min(30,rot));
+  cardEls[0].el.style.transform=`translate(${currentX}px,${currentY}px) rotate(${clampedRot}deg)`;
+  const likeOv=cardEls[0].el.querySelector('.swipe-overlay.like');
+  const nopeOv=cardEls[0].el.querySelector('.swipe-overlay.nope');
+  const superOv=cardEls[0].el.querySelector('.swipe-overlay.super');
+  likeOv.style.opacity=Math.min(1,Math.max(0,currentX/100));
+  nopeOv.style.opacity=Math.min(1,Math.max(0,-currentX/100));
+  superOv.style.opacity=Math.min(1,Math.max(0,-currentY/80));
+  if(currentX>0){likeOv.style.opacity=Math.min(1,currentX/100);nopeOv.style.opacity=0}
+  else{nopeOv.style.opacity=Math.min(1,-currentX/100);likeOv.style.opacity=0}
+  if(currentY<-40)superOv.style.opacity=Math.min(1,-currentY/80);else superOv.style.opacity=0;
+}
+function onPointerUp(e){
+  if(!isDragging)return;isDragging=false;
+  const elapsed=Date.now()-cardStartTime;
+  const vx=Math.abs(currentX)/(elapsed||1)*1000;
+  const vy=Math.abs(currentY)/(elapsed||1)*1000;
+  if(currentY<-80||(currentY<-40&&vy>800)){doSwipe('super');return}
+  if(currentX>100||(currentX>50&&vx>600)){doSwipe('like');return}
+  if(currentX<-100||(currentX<-50&&vx>600)){doSwipe('skip');return}
+  // snap back
+  const card=cardEls[0].el;
+  card.style.transition='transform .4s cubic-bezier(.2,.8,.3,1)';
+  card.style.transform='translate(0,0) rotate(0deg)';
+  card.querySelector('.swipe-overlay.like').style.opacity=0;
+  card.querySelector('.swipe-overlay.nope').style.opacity=0;
+  card.querySelector('.swipe-overlay.super').style.opacity=0;
+}
+
+function doSwipe(dir){
+  if(cardEls.length===0)return;
+  const {el,movie}=cardEls[0];
+  el.style.transition='transform .5s cubic-bezier(.2,.8,.3,1),opacity .5s';
+  if(dir==='like'){el.style.transform='translate(150vw,0) rotate(30deg)';el.querySelector('.swipe-overlay.like').style.opacity=1}
+  else if(dir==='skip'){el.style.transform='translate(-150vw,0) rotate(-30deg)';el.querySelector('.swipe-overlay.nope').style.opacity=1}
+  else{el.style.transform='translate(0,-150vh) rotate(0deg)';el.querySelector('.swipe-overlay.super').style.opacity=1}
+  el.style.opacity='0';
+
+  if(state.groupMode){
+    if(!state.groupSwipes[state.groupNames[state.groupCurrentPerson]])state.groupSwipes[state.groupNames[state.groupCurrentPerson]]=[];
+    state.groupSwipes[state.groupNames[state.groupCurrentPerson]].push({id:movie.id,dir});
+  }
+
+  setTimeout(()=>{
+    if(!state.groupMode){
+      state.swipes.push({id:movie.id,direction:dir,timestamp:Date.now()});
+      if(dir==='like'||dir==='super'){
+        if(!state.watchlist.includes(movie.id))state.watchlist.push(movie.id);
+        if(dir==='super'&&!state.superlikes.includes(movie.id))state.superlikes.push(movie.id);
+      }
+      updateTaste(movie,dir);
+      save();
+    }
+    state.deck.shift();
+    if(state.groupMode&&state.deck.length===0){
+      advanceGroupPerson();
+    }else{
+      renderCards();
+    }
+  },300);
+}
+
+// ══════════════════════════════════════════
+// MOOD FILTER
+// ══════════════════════════════════════════
+function renderMoods(){
+  const bar=document.getElementById('mood-bar-h6t5');
+  bar.innerHTML=MOODS.map(m=>{
+    const active=m.id==='all'?state.activeMoods.length===0:state.activeMoods.includes(m.id);
+    return `<button class="mood-pill${active?' active':''}" data-mood="${m.id}">${m.emoji} ${m.label}</button>`;
+  }).join('');
+  bar.querySelectorAll('.mood-pill').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const mid=btn.dataset.mood;
+      if(mid==='all'){state.activeMoods=[];}
+      else{
+        const idx=state.activeMoods.indexOf(mid);
+        if(idx>-1)state.activeMoods.splice(idx,1);else state.activeMoods.push(mid);
+      }
+      save();buildDeck();renderCards();renderMoods();
+    });
+  });
+}
+
+// ══════════════════════════════════════════
+// GROUP MODE
+// ══════════════════════════════════════════
+function showGroupModal(){
+  const modal=document.getElementById('group-modal-h4i8');
+  const body=document.getElementById('group-body-i5j9');
+  body.innerHTML=`
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="text-lg font-bold">👥 Group Mode</h3>
+      <button id="close-group-m-c3d4" style="color:#8b949e;background:none;border:none;cursor:pointer;padding:8px"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <p class="text-sm mb-4" style="color:#8b949e">Everyone swipes, then we find movies you ALL loved!</p>
+    <label class="text-xs font-bold mb-2 block" style="color:#f0b429">How many people?</label>
+    <div class="flex gap-2 mb-4" id="group-count-e5f6">
+      ${[2,3,4,5,6].map(n=>`<button class="px-4 py-2 rounded-lg text-sm font-bold" style="background:#21262d;color:#e6edf3;border:1px solid #30363d;cursor:pointer" data-gcount="${n}">${n}</button>`).join('')}
+    </div>
+    <div id="group-names-g7h8" class="space-y-2 mb-4"></div>
+    <button id="start-group-i9j0" class="w-full py-3 rounded-xl text-sm font-bold hidden" style="background:#f0b429;color:#0d1117">Start Group Swiping!</button>
+  `;
+  if(typeof lucide!=="undefined"&&typeof lucide.createIcons==="function")lucide.createIcons();
+  modal.classList.add('open');
+  document.getElementById('close-group-m-c3d4').addEventListener('click',()=>modal.classList.remove('open'));
+  let count=0;
+  body.querySelectorAll('[data-gcount]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      count=parseInt(btn.dataset.gcount);
+      body.querySelectorAll('[data-gcount]').forEach(b=>{b.style.background='#21262d';b.style.borderColor='#30363d'});
+      btn.style.background='rgba(240,180,41,.2)';btn.style.borderColor='#f0b429';
+      const names=document.getElementById('group-names-g7h8');
+      names.innerHTML='';
+      for(let i=0;i<count;i++){
+        const inp=document.createElement('input');
+        inp.type='text';inp.placeholder=`Person ${i+1} name`;inp.className='group-name-input w-full px-4 py-2 rounded-lg text-sm';
+        inp.style.cssText='background:#21262d;color:#e6edf3;border:1px solid #30363d;outline:none';
+        names.appendChild(inp);
+      }
+      document.getElementById('start-group-i9j0').classList.remove('hidden');
+    });
+  });
+  document.getElementById('start-group-i9j0').addEventListener('click',()=>{
+    const inputs=body.querySelectorAll('.group-name-input');
+    state.groupNames=Array.from(inputs).map((inp,i)=>inp.value.trim()||`Person ${i+1}`);
+    state.groupMode=true;state.groupCurrentPerson=0;state.groupSwipes={};
+    state.groupNames.forEach(n=>{state.groupSwipes[n]=[]});
+    state.groupDeck=MOVIES.map(m=>m.id);
+    for(let i=state.groupDeck.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[state.groupDeck[i],state.groupDeck[j]]=[state.groupDeck[j],state.groupDeck[i]]}
+    state.groupDeck=state.groupDeck.slice(0,15);
+    state.deck=state.groupDeck.map(id=>MOVIES.find(m=>m.id===id));
+    modal.classList.remove('open');
+    document.getElementById('group-turn-f8h2').classList.remove('hidden');
+    document.getElementById('turn-name-g9j4').textContent=`🎬 ${state.groupNames[0]}'s turn`;
+    document.getElementById('group-toggle-v4f2').classList.add('active');
+    renderCards();
+  });
+}
+function advanceGroupPerson(){
+  state.groupCurrentPerson++;
+  if(state.groupCurrentPerson>=state.groupNames.length){showGroupResults();return}
+  state.deck=state.groupDeck.map(id=>MOVIES.find(m=>m.id===id));
+  document.getElementById('turn-name-g9j4').textContent=`🎬 ${state.groupNames[state.groupCurrentPerson]}'s turn`;
+  renderCards();
+}
+function showGroupResults(){
+  state.groupMode=false;
+  document.getElementById('group-turn-f8h2').classList.add('hidden');
+  document.getElementById('group-toggle-v4f2').classList.remove('active');
+  const likedSets=state.groupNames.map(name=>{
+    return new Set((state.groupSwipes[name]||[]).filter(s=>s.dir==='like'||s.dir==='super').map(s=>s.id));
+  });
+  let matches=[];
+  state.groupDeck.forEach(id=>{
+    if(likedSets.every(set=>set.has(id)))matches.push(id);
+  });
+  const modal=document.getElementById('match-modal-j6k1');
+  const body=document.getElementById('match-body-k7l2');
+  if(matches.length>0){
+    spawnConfetti();
+    body.innerHTML=`
+      <div class="text-center mb-4">
+        <div class="text-5xl mb-2">🎉</div>
+        <h3 class="text-xl font-bold mb-1" style="color:#f0b429">It's a Match!</h3>
+        <p class="text-sm" style="color:#8b949e">${state.groupNames.join(', ')} all loved these:</p>
+      </div>
+      <div class="space-y-3 mb-4">
+        ${matches.map(id=>{const m=MOVIES.find(mv=>mv.id===id);return`
+          <div class="flex items-center gap-3 p-3 rounded-xl" style="background:#21262d">
+            <div class="w-12 h-12 rounded-lg flex items-center justify-center text-2xl flex-shrink-0" style="background:${m.posterGradient}">${m.emoji}</div>
+            <div class="flex-1 min-w-0"><div class="text-sm font-bold truncate">${m.title}</div><div class="text-xs" style="color:#8b949e">${m.year} · ⭐ ${m.rating}</div></div>
+          </div>
+        `}).join('')}
+      </div>
+      <button id="close-match-k1l2" class="w-full py-3 rounded-xl text-sm font-bold" style="background:#f0b429;color:#0d1117">Watch one of these! 🍿</button>
+    `;
+  }else{
+    body.innerHTML=`
+      <div class="text-center py-8">
+        <div class="text-5xl mb-4">😅</div>
+        <h3 class="text-lg font-bold mb-2">No Matches This Time</h3>
+        <p class="text-sm mb-4" style="color:#8b949e">Try again with fewer people or more movies</p>
+        <button id="close-match-k1l2" class="px-8 py-3 rounded-xl text-sm font-bold" style="background:#f0b429;color:#0d1117">Try Again</button>
+      </div>
+    `;
+  }
+  modal.classList.add('open');
+  setTimeout(()=>{
+    const closeBtn=document.getElementById('close-match-k1l2');
+    if(closeBtn)closeBtn.addEventListener('click',()=>{modal.classList.remove('open');buildDeck();renderCards()});
+  },50);
+}
+function spawnConfetti(){
+  const colors=['#e50914','#f0b429','#22c55e','#3b82f6','#a855f7','#ec4899'];
+  for(let i=0;i<60;i++){
+    const p=document.createElement('div');p.className='confetti-particle';
+    p.style.left=Math.random()*100+'vw';p.style.top=-10+'px';
+    p.style.background=colors[Math.floor(Math.random()*colors.length)];
+    p.style.animationDelay=Math.random()*1+'s';
+    p.style.animationDuration=(1.5+Math.random())+'s';
+    p.style.width=(6+Math.random()*6)+'px';p.style.height=(6+Math.random()*6)+'px';
+    document.body.appendChild(p);
+    setTimeout(()=>p.remove(),3500);
+  }
+}
+
+// ══════════════════════════════════════════
+// WATCHLIST
+// ══════════════════════════════════════════
+function renderWatchlist(){
+  const grid=document.getElementById('wl-grid-m6p1');
+  const empty=document.getElementById('wl-empty-n7q2');
+  const sortBar=document.getElementById('wl-sort-bar-k4n8');
+  const platBar=document.getElementById('wl-platform-bar-l5o9');
+
+  const sorts=[{id:'added',label:'Date Added'},{id:'rating',label:'Rating'},{id:'genre',label:'Genre'}];
+  sortBar.innerHTML=sorts.map(s=>`<button class="mood-pill${state.wlSort===s.id?' active':''}" data-wlsort="${s.id}">${s.label}</button>`).join('');
+  sortBar.querySelectorAll('[data-wlsort]').forEach(b=>b.addEventListener('click',()=>{state.wlSort=b.dataset.wlsort;renderWatchlist()}));
+
+  const plats=['All',...ALL_PLATFORMS];
+  platBar.innerHTML=plats.map(p=>`<button class="mood-pill${state.wlPlatform===p?' active':''}" data-wlplat="${p}" style="font-size:.65rem">${p}</button>`).join('');
+  platBar.querySelectorAll('[data-wlplat]').forEach(b=>b.addEventListener('click',()=>{state.wlPlatform=b.dataset.wlplat;renderWatchlist()}));
+
+  let movies=state.watchlist.map(id=>MOVIES.find(m=>m.id===id)).filter(Boolean);
+  if(state.wlPlatform!=='All')movies=movies.filter(m=>m.platforms.some(p=>p===state.wlPlatform));
+  if(state.wlSort==='rating')movies.sort((a,b)=>b.rating-a.rating);
+  else if(state.wlSort==='genre')movies.sort((a,b)=>a.genres[0].localeCompare(b.genres[0]));
+
+  if(movies.length===0){grid.innerHTML='';empty.classList.remove('hidden');return}
+  empty.classList.add('hidden');
+  grid.innerHTML=movies.map(m=>`
+    <div class="wl-card" data-movieid="${m.id}">
+      <div class="relative h-36 flex items-center justify-center" style="background:${m.posterGradient}">
+        <span class="text-4xl">${m.emoji}</span>
+        ${state.superlikes.includes(m.id)?'<span class="absolute top-2 left-2 text-sm">⭐</span>':''}
+      </div>
+      <div class="p-3">
+        <h4 class="text-xs font-bold truncate">${m.title}</h4>
+        <div class="flex items-center gap-1 mt-1"><span class="text-xs" style="color:#8b949e">${m.year}</span><span class="text-xs" style="color:#f0b429">⭐ ${m.rating}</span></div>
+        <div class="flex gap-1 mt-1 flex-wrap">${m.platforms.map(p=>`<span class="platform-badge" style="background:${PLATFORM_COLORS[p]||'#333'};color:#fff;font-size:.5rem">${p}</span>`).join('')}</div>
+      </div>
+    </div>
+  `).join('');
+  grid.querySelectorAll('.wl-card').forEach(c=>c.addEventListener('click',()=>showDetail(parseInt(c.dataset.movieid))));
+}
+
+// ══════════════════════════════════════════
+// SEARCH
+// ══════════════════════════════════════════
+function renderSearch(){
+  const genreBar=document.getElementById('search-genre-bar-v7x2');
+  const platBar=document.getElementById('search-plat-bar-w8y3');
+  const decadeBar=document.getElementById('search-decade-bar-x9z4');
+
+  genreBar.innerHTML=['All',...ALL_GENRES].map(g=>`<button class="mood-pill${state.searchGenre===g?' active':''}" data-sg="${g}" style="font-size:.65rem">${g}</button>`).join('');
+  genreBar.querySelectorAll('[data-sg]').forEach(b=>b.addEventListener('click',()=>{state.searchGenre=b.dataset.sg;doSearch()}));
+
+  platBar.innerHTML=['All',...ALL_PLATFORMS].map(p=>`<button class="mood-pill${state.searchPlatform===p?' active':''}" data-sp="${p}" style="font-size:.65rem">${p}</button>`).join('');
+  platBar.querySelectorAll('[data-sp]').forEach(b=>b.addEventListener('click',()=>{state.searchPlatform=b.dataset.sp;doSearch()}));
+
+  decadeBar.innerHTML=['All','90s','00s','10s','20s'].map(d=>`<button class="mood-pill${state.searchDecade===d?' active':''}" data-sd="${d}" style="font-size:.65rem">${d}</button>`).join('');
+  decadeBar.querySelectorAll('[data-sd]').forEach(b=>b.addEventListener('click',()=>{state.searchDecade=b.dataset.sd;doSearch()}));
+
+  doSearch();
+}
+function doSearch(){
+  const q=state.searchQuery.toLowerCase();
+  let results=MOVIES.filter(m=>{
+    if(q&&!m.title.toLowerCase().includes(q)&&!m.cast.some(c=>c.toLowerCase().includes(q))&&!m.director.toLowerCase().includes(q))return false;
+    if(state.searchGenre!=='All'&&!m.genres.includes(state.searchGenre))return false;
+    if(state.searchPlatform!=='All'&&!m.platforms.includes(state.searchPlatform))return false;
+    if(state.searchDecade!=='All'&&getDecade(m.year)!==state.searchDecade)return false;
+    return true;
+  });
+  if(!q)results.sort((a,b)=>b.rating-a.rating);
+  const grid=document.getElementById('search-results-y1a5');
+  grid.innerHTML=results.map(m=>`
+    <div class="wl-card" data-movieid="${m.id}">
+      <div class="relative h-32 flex items-center justify-center" style="background:${m.posterGradient}">
+        <span class="text-3xl">${m.emoji}</span>
+      </div>
+      <div class="p-2">
+        <h4 class="text-xs font-bold truncate">${m.title}</h4>
+        <div class="flex items-center gap-1 mt-1"><span class="text-xs" style="color:#8b949e">${m.year}</span><span class="text-xs" style="color:#f0b429">⭐ ${m.rating}</span></div>
+      </div>
+    </div>
+  `).join('');
+  grid.querySelectorAll('.wl-card').forEach(c=>c.addEventListener('click',()=>showDetail(parseInt(c.dataset.movieid))));
+  // re-render filter pills
+  const genreBar=document.getElementById('search-genre-bar-v7x2');
+  genreBar.querySelectorAll('.mood-pill').forEach(b=>{if(b.dataset.sg===state.searchGenre)b.classList.add('active');else b.classList.remove('active')});
+  const platBar=document.getElementById('search-plat-bar-w8y3');
+  platBar.querySelectorAll('.mood-pill').forEach(b=>{if(b.dataset.sp===state.searchPlatform)b.classList.add('active');else b.classList.remove('active')});
+  const decadeBar=document.getElementById('search-decade-bar-x9z4');
+  decadeBar.querySelectorAll('.mood-pill').forEach(b=>{if(b.dataset.sd===state.searchDecade)b.classList.add('active');else b.classList.remove('active')});
+}
+
+// ══════════════════════════════════════════
+// PROFILE
+// ══════════════════════════════════════════
+function renderProfile(){
+  const cont=document.getElementById('profile-content-q7t3');
+  const t=state.taste;
+  const totalSwipes=state.swipes.length;
+  const liked=state.swipes.filter(s=>s.direction==='like'||s.direction==='super').length;
+  const superLiked=state.swipes.filter(s=>s.direction==='super').length;
+  const likeRate=totalSwipes?Math.round(liked/totalSwipes*100):0;
+
+  if(totalSwipes===0){
+    cont.innerHTML=`<div class="flex flex-col items-center py-16 text-center"><div class="text-5xl mb-4">🎬</div><h3 class="text-lg font-bold mb-2">No Swipes Yet</h3><p class="text-sm" style="color:#8b949e">Swipe some movies to build your taste profile</p></div>`;
+    return;
+  }
+
+  // Determine top genre
+  const genreEntries=Object.entries(t.genreScores).sort((a,b)=>b[1]-a[1]);
+  const topGenre=genreEntries.length?genreEntries[0][0]:'Drama';
+  const avatarEmojis={Action:'💥',Drama:'🎭',Comedy:'😂',Horror:'👻','Sci-Fi':'🚀',Romance:'💕',Thriller:'🔍',Animation:'✨',Crime:'🕵️',Mystery:'🔮',War:'⚔️',Adventure:'🌍',Musical:'🎶',Fantasy:'🦄'};
+  const titles={Action:'The Thrill Seeker',Drama:'The Deep Thinker',Comedy:'The Comedy Connoisseur',Horror:'The Fright Night Fan','Sci-Fi':'The Sci-Fi Geek',Romance:'The Rom-Com Romantic',Thriller:'The Edge-of-Seat Expert',Animation:'The Animation Aficionado',Crime:'The Crime Story Buff',Mystery:'The Mystery Maven',War:'The War Film Historian',Adventure:'The Adventure Seeker',Musical:'The Musical Enthusiast',Fantasy:'The Fantasy Dreamer'};
+
+  // Top genres bar chart
+  const maxGenre=genreEntries.length?Math.max(genreEntries[0][1],1):1;
+  const genreBars=genreEntries.filter(([,v])=>v>0).slice(0,6).map(([g,v])=>`
+    <div class="flex items-center gap-2 mb-2">
+      <span class="text-xs font-bold w-16 text-right" style="color:#8b949e">${g}</span>
+      <div class="flex-1 rounded-md overflow-hidden" style="background:#21262d;height:24px">
+        <div class="bar-fill" style="width:${Math.max(8,v/maxGenre*100)}%"></div>
+      </div>
+      <span class="text-xs font-bold w-6" style="color:#f0b429">${v}</span>
+    </div>
+  `).join('');
+
+  // Platform breakdown
+  const platEntries=Object.entries(t.platformScores).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+  const platTotal=platEntries.reduce((s,[,v])=>s+v,0)||1;
+  const platPills=platEntries.slice(0,6).map(([p,v])=>`<span class="px-3 py-1 rounded-full text-xs font-bold" style="background:${PLATFORM_COLORS[p]||'#333'};color:#fff">${p} ${Math.round(v/platTotal*100)}%</span>`).join('');
+
+  // Decade
+  const decEntries=Object.entries(t.decadeScores).sort((a,b)=>b[1]-a[1]);
+  const favDecade=decEntries.length?decEntries[0][0]:'—';
+
+  // Fav directors
+  const dirEntries=Object.entries(t.directorScores).filter(([,v])=>v>=2).sort((a,b)=>b[1]-a[1]);
+
+  // Recent
+  const recent=state.swipes.slice(-5).reverse();
+  const recentHTML=recent.map(s=>{
+    const m=MOVIES.find(mv=>mv.id===s.id);if(!m)return'';
+    const icon=s.direction==='like'?'❤️':s.direction==='super'?'⭐':'❌';
+    return`<div class="flex items-center gap-3 py-2" style="border-bottom:1px solid #21262d"><span class="text-lg">${icon}</span><span class="text-sm flex-1">${m.title}</span><span class="text-xs" style="color:#8b949e">${m.year}</span></div>`;
+  }).join('');
+
+  cont.innerHTML=`
+    <div class="text-center mb-6 pt-2">
+      <div class="text-5xl mb-2">${avatarEmojis[topGenre]||'🎬'}</div>
+      <h2 class="text-xl font-bold mb-1">${titles[topGenre]||'Movie Lover'}</h2>
+      <p class="text-xs" style="color:#8b949e">Your taste profile based on ${totalSwipes} swipes</p>
+    </div>
+    <div class="flex gap-2 mb-6">
+      <div class="stat-card"><div class="stat-num">${totalSwipes}</div><div class="stat-label">Swiped</div></div>
+      <div class="stat-card"><div class="stat-num">${liked}</div><div class="stat-label">Liked</div></div>
+      <div class="stat-card"><div class="stat-num">${superLiked}</div><div class="stat-label">Super</div></div>
+      <div class="stat-card"><div class="stat-num">${likeRate}%</div><div class="stat-label">Rate</div></div>
+    </div>
+    <div class="mb-6">
+      <h3 class="text-sm font-bold mb-3" style="color:#f0b429">🎯 Top Genres</h3>
+      ${genreBars||'<p class="text-xs" style="color:#8b949e">No data yet</p>'}
+    </div>
+    <div class="mb-6">
+      <h3 class="text-sm font-bold mb-3" style="color:#f0b429">📺 Top Platforms</h3>
+      <div class="flex flex-wrap gap-2">${platPills||'<p class="text-xs" style="color:#8b949e">No data yet</p>'}</div>
+    </div>
+    <div class="mb-6">
+      <h3 class="text-sm font-bold mb-3" style="color:#f0b429">📅 Favorite Decade</h3>
+      <span class="px-4 py-2 rounded-full text-sm font-bold" style="background:rgba(240,180,41,.15);color:#f0b429;border:1px solid #f0b429">${favDecade}</span>
+    </div>
+    ${dirEntries.length?`<div class="mb-6"><h3 class="text-sm font-bold mb-3" style="color:#f0b429">🎬 Directors You Love</h3><div class="space-y-1">${dirEntries.map(([d,v])=>`<div class="text-sm"><span style="color:#e6edf3">${d}</span> <span class="text-xs" style="color:#8b949e">(${v} pts)</span></div>`).join('')}</div></div>`:''}
+    <div class="mb-6">
+      <h3 class="text-sm font-bold mb-3" style="color:#f0b429">⏱️ Recent Activity</h3>
+      ${recentHTML||'<p class="text-xs" style="color:#8b949e">No recent swipes</p>'}
+    </div>
+    <div class="space-y-3 pt-4" style="border-top:1px solid #30363d">
+      <h3 class="text-sm font-bold" style="color:#8b949e">Settings</h3>
+      <div class="flex gap-3">
+        <button id="clear-history-a2b3" class="flex-1 py-2 rounded-lg text-xs font-bold" style="background:#21262d;color:#e50914;border:1px solid #30363d;cursor:pointer">Clear History</button>
+        <button id="export-wl-c4d5" class="flex-1 py-2 rounded-lg text-xs font-bold" style="background:#21262d;color:#22c55e;border:1px solid #30363d;cursor:pointer">Export Watchlist</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('clear-history-a2b3').addEventListener('click',()=>{
+    if(confirm('Clear all swipe history and taste data?')){
+      state.watchlist=[];state.superlikes=[];state.taste={genreScores:{},moodScores:{},decadeScores:{},platformScores:{},directorScores:{},ratingMin:10};state.swipes=[];
+      save();buildDeck();renderCards();renderProfile();
+    }
+  });
+  document.getElementById('export-wl-c4d5').addEventListener('click',()=>{
+    const movies=state.watchlist.map(id=>MOVIES.find(m=>m.id===id)).filter(Boolean);
+    const text=movies.map(m=>`${m.title} (${m.year}) — ⭐ ${m.rating} — ${m.platforms.join(', ')}`).join('\n');
+    const blob=new Blob([text],{type:'text/plain'});const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download='cineswipe-watchlist.txt';a.click();URL.revokeObjectURL(url);
+  });
+}
+
+// ══════════════════════════════════════════
+// MOVIE DETAIL MODAL
+// ══════════════════════════════════════════
+function showDetail(movieId){
+  const m=MOVIES.find(mv=>mv.id===movieId);if(!m)return;
+  const modal=document.getElementById('modal-overlay-d2f6');
+  const body=document.getElementById('modal-body-e3g7');
+  const inWatchlist=state.watchlist.includes(m.id);
+
+  body.innerHTML=`
+    <div class="relative h-48 flex items-center justify-center" style="background:${m.posterGradient}">
+      <span class="text-6xl" style="filter:drop-shadow(0 4px 12px rgba(0,0,0,.5))">${m.emoji}</span>
+      <button id="close-detail-f6g7" class="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center" style="background:rgba(0,0,0,.5);color:#fff;border:none;cursor:pointer"><i data-lucide="x" class="w-5 h-5"></i></button>
+      ${state.superlikes.includes(m.id)?'<span class="absolute top-3 left-3 text-2xl">⭐</span>':''}
+    </div>
+    <div class="p-5">
+      <h2 class="text-xl font-bold mb-1">${m.title}</h2>
+      <div class="flex items-center gap-2 text-sm mb-3" style="color:#8b949e">
+        <span>${m.year}</span><span>·</span>
+        <span style="color:#f0b429">${'★'.repeat(Math.round(m.rating/2))}${'☆'.repeat(5-Math.round(m.rating/2))}</span>
+        <span>${m.rating}</span><span>·</span><span>${m.runtime}</span>
+      </div>
+      <div class="flex flex-wrap gap-1.5 mb-3">${m.genres.map(g=>`<span class="genre-pill" style="background:rgba(240,180,41,.15);color:#f0b429;padding:4px 10px">${g}</span>`).join('')}</div>
+      <p class="text-sm mb-4 leading-relaxed" style="color:#ccc">${m.description}</p>
+      <div class="mb-3"><span class="text-xs font-bold" style="color:#8b949e">DIRECTOR</span><p class="text-sm font-medium mt-1">${m.director}</p></div>
+      <div class="mb-3"><span class="text-xs font-bold" style="color:#8b949e">CAST</span><p class="text-sm mt-1" style="color:#ccc">${m.cast.join(' · ')}</p></div>
+      <div class="flex flex-wrap gap-1.5 mb-4">
+        ${m.platforms.map(p=>`<span class="platform-badge" style="background:${PLATFORM_COLORS[p]||'#333'};color:#fff;padding:4px 12px;font-size:.7rem">${p}</span>`).join('')}
+      </div>
+      <div class="flex gap-3">
+        <button id="watch-now-h8i9" class="flex-1 py-3 rounded-xl text-sm font-bold" style="background:#e50914;color:#fff;border:none;cursor:pointer">▶ Watch Now</button>
+        <button id="toggle-wl-j0k1" class="flex-1 py-3 rounded-xl text-sm font-bold" style="background:${inWatchlist?'#21262d':'rgba(240,180,41,.15)'};color:${inWatchlist?'#e50914':'#f0b429'};border:1px solid ${inWatchlist?'#e50914':'#f0b429'};cursor:pointer">${inWatchlist?'Remove ✕':'Add to Watchlist ❤️'}</button>
+      </div>
+    </div>
+  `;
+  if(typeof lucide!=="undefined"&&typeof lucide.createIcons==="function")lucide.createIcons();
+  modal.classList.add('open');
+  document.getElementById('close-detail-f6g7').addEventListener('click',()=>modal.classList.remove('open'));
+  document.getElementById('watch-now-h8i9').addEventListener('click',()=>{window.open(`https://www.google.com/search?q=${encodeURIComponent(m.title+' watch online')}`,'_blank')});
+  document.getElementById('toggle-wl-j0k1').addEventListener('click',()=>{
+    if(state.watchlist.includes(m.id)){state.watchlist=state.watchlist.filter(id=>id!==m.id);state.superlikes=state.superlikes.filter(id=>id!==m.id)}
+    else{state.watchlist.push(m.id)}
+    save();showDetail(m.id);renderWatchlist();
+  });
+  modal.addEventListener('click',function handler(e){if(e.target===modal){modal.classList.remove('open');modal.removeEventListener('click',handler)}});
+}
+
+// ══════════════════════════════════════════
+// TAB NAVIGATION
+// ══════════════════════════════════════════
+function switchTab(tab){
+  state.currentTab=tab;
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.add('hidden'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  const tabEl=document.getElementById('tab-'+tab+'-'+{discover:'q8m1',watchlist:'w2e6',search:'s4u8',profile:'p6s2'}[tab]);
+  if(tabEl)tabEl.classList.remove('hidden');
+  document.querySelector(`.nav-btn[data-tab="${tab}"]`).classList.add('active');
+  if(tab==='watchlist')renderWatchlist();
+  if(tab==='search')renderSearch();
+  if(tab==='profile')renderProfile();
+}
+
+// ══════════════════════════════════════════
+// INITIALIZATION
+// ══════════════════════════════════════════
+function initApp(){
+  buildDeck();renderCards();renderMoods();
+
+  // Nav
+  document.querySelectorAll('.nav-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>switchTab(btn.dataset.tab));
+  });
+
+  // Action buttons
+  document.getElementById('btn-skip-a1z9').addEventListener('click',()=>doSwipe('skip'));
+  document.getElementById('btn-like-c3x7').addEventListener('click',()=>doSwipe('like'));
+  document.getElementById('btn-super-e5v3').addEventListener('click',()=>doSwipe('super'));
+
+  // Keyboard
+  document.addEventListener('keydown',e=>{
+    if(state.currentTab!=='discover')return;
+    if(e.key==='ArrowRight')doSwipe('like');
+    else if(e.key==='ArrowLeft')doSwipe('skip');
+    else if(e.key==='ArrowUp'){e.preventDefault();doSwipe('super')}
+  });
+
+  // Group toggle
+  document.getElementById('group-toggle-v4f2').addEventListener('click',()=>{
+    if(state.groupMode){
+      state.groupMode=false;
+      document.getElementById('group-turn-f8h2').classList.add('hidden');
+      document.getElementById('group-toggle-v4f2').classList.remove('active');
+      buildDeck();renderCards();
+    }else{showGroupModal()}
+  });
+
+  // Reset deck
+  document.getElementById('reset-deck-j4w1').addEventListener('click',()=>{
+    state.swipes=[];state.taste={genreScores:{},moodScores:{},decadeScores:{},platformScores:{},directorScores:{},ratingMin:10};
+    save();buildDeck();renderCards();
+  });
+
+  // Go to discover from empty watchlist
+  document.getElementById('go-discover-o8r3').addEventListener('click',()=>switchTab('discover'));
+
+  // Search input
+  const searchInput=document.getElementById('search-input-t5v9');
+  const searchClear=document.getElementById('search-clear-u6w1');
+  searchInput.addEventListener('input',()=>{
+    state.searchQuery=searchInput.value;
+    searchClear.classList.toggle('hidden',!searchInput.value);
+    doSearch();
+  });
+  searchClear.addEventListener('click',()=>{searchInput.value='';state.searchQuery='';searchClear.classList.add('hidden');doSearch()});
+}
+
+// ══════════════════════════════════════════
+// BOOT
+// ══════════════════════════════════════════
+if(typeof lucide!=="undefined"&&typeof lucide.createIcons==="function"){lucide.createIcons()}
+showOnboarding();
+if(state.onboarded){document.getElementById('app-wrap-x82j').style.display='';initApp()}
+</script>
+</body>
+</html>
